@@ -1,0 +1,7 @@
+{
+    "_owner": "sten@artdecode.de",
+    "description": "A normalizer to extract Tracebox observations from tracebox NDJSON files",
+    "_file_types" : ["tracebox-v1-ndjson"],
+    "_platform" : "golang-1.10",
+    "_invocation" : "pto3-trace"
+}

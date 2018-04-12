@@ -12,3 +12,9 @@
 
 # Project-local glide cache, RE: https://github.com/Masterminds/glide/issues/736
 .glide/
+
+# Data directories, contain test data
+data/
+
+# Output directory, contains program output
+out/
