@@ -45,19 +45,21 @@ func processFile(path string) {
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 
+		// It's possible to move the lock further inwards, but I'm checking
+		// whether fewer calls to Lock()/Unlock() can improve performance.
+		lock.Lock()
 		for _, re := range res {
 			matches := re.FindAllStringSubmatch(line, -1)
 			for _, match := range matches {
 				key := match[1]
 
-				lock.Lock()
 				if conditions[key] == nil {
 					conditions[key] = new(tbStat)
 				}
 				conditions[key].Count++
-				lock.Unlock()
 			}
 		}
+		lock.Unlock()
 	}
 	if err := f.Close(); err != nil {
 		log.Printf("ERROR: can't close \"%s\": %v", path, err)
