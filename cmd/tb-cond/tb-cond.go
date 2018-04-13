@@ -33,7 +33,7 @@ var (
 )
 
 func processFile(path string) {
-	fmt.Println(path, "...")
+	fmt.Println(path, "started")
 
 	f, err := os.Open(path)
 	if err != nil {
@@ -64,7 +64,7 @@ func processFile(path string) {
 	if err := f.Close(); err != nil {
 		log.Printf("ERROR: can't close \"%s\": %v", path, err)
 	}
-	fmt.Println(path, " done")
+	fmt.Println(path, "done")
 }
 
 func worker(id int, jobs <-chan job, done chan<- bool) {
