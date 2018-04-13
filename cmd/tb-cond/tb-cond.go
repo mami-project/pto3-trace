@@ -8,7 +8,6 @@ import (
 	"os"
 	"regexp"
 	"sort"
-	"strings"
 	"sync"
 )
 
@@ -45,7 +44,7 @@ func processFile(path string) {
 
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
+		line := scanner.Text()
 
 		for _, re := range res {
 			matches := re.FindAllString(line, -1)
