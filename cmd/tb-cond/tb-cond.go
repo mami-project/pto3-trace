@@ -16,6 +16,10 @@ type tbStat struct {
 	Count uint64 // how many instances were observed
 }
 
+var (
+	nWorkers = flag.Int("workers", 1, "number of workers in pool")
+)
+
 var conditions = make(map[string]*tbStat)
 var lock sync.Mutex
 
@@ -68,14 +72,11 @@ func worker(id int, jobs <-chan job, done chan<- bool) {
 	done <- true
 }
 
-// On muninn, we have 40 cores
-const nWorkers = 20
-
 func processFiles(paths []string) {
 	jobs := make(chan job, 100)
-	done := make(chan bool, nWorkers)
+	done := make(chan bool, *nWorkers)
 
-	for w := 1; w <= nWorkers; w++ {
+	for w := 1; w <= *nWorkers; w++ {
 		go worker(w, jobs, done)
 	}
 
@@ -84,7 +85,7 @@ func processFiles(paths []string) {
 	}
 	close(jobs)
 
-	for w := 1; w <= nWorkers; w++ {
+	for w := 1; w <= *nWorkers; w++ {
 		<-done
 	}
 }
