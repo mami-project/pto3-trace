@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 )
 
 type tbStat struct {
@@ -16,8 +17,11 @@ type tbStat struct {
 }
 
 var conditions = make(map[string]*tbStat)
+var lock sync.Mutex
 
-//sed -n -e 's/^.*IP::\([^"]*\).*$/\1/p' -e 's/^.*TCP::\([^"]*\).*$/\1/p'
+type job struct {
+	Path string
+}
 
 var (
 	ipRe  = regexp.MustCompile(`(IP::[^"]*)`)
@@ -41,23 +45,47 @@ func processFile(path string) {
 			matches := re.FindAllStringSubmatch(line, -1)
 			for _, match := range matches {
 				key := match[1]
+
+				lock.Lock()
 				if conditions[key] == nil {
 					conditions[key] = new(tbStat)
 				}
 				conditions[key].Count++
+				lock.Unlock()
 			}
 		}
 	}
 	if err := f.Close(); err != nil {
 		log.Printf("ERROR: can't close \"%s\": %v", path, err)
 	}
+	fmt.Println(path)
 }
 
+func worker(id int, jobs <-chan job, done chan<- bool) {
+	for job := range jobs {
+		processFile(job.Path)
+	}
+	done <- true
+}
+
+// On muninn, we have 40 cores
+const nWorkers = 20
+
 func processFiles(paths []string) {
+	jobs := make(chan job, 100)
+	done := make(chan bool, nWorkers)
+
+	for w := 1; w <= nWorkers; w++ {
+		go worker(w, jobs, done)
+	}
+
 	for _, p := range paths {
-		fmt.Print(p, "...")
-		processFile(p)
-		fmt.Println()
+		jobs <- job{Path: p}
+	}
+	close(jobs)
+
+	for w := 1; w <= nWorkers; w++ {
+		<-done
 	}
 }
 
