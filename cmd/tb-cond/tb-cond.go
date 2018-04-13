@@ -28,8 +28,8 @@ type job struct {
 }
 
 var (
-	ipRe  = regexp.MustCompile(`(IP::[^"]*)`)
-	tcpRe = regexp.MustCompile(`(TCP::[^"]*)`)
+	ipRe  = regexp.MustCompile(`IP::[^"]+`)
+	tcpRe = regexp.MustCompile(`TCP::[^"]+`)
 )
 
 func processFile(path string) {
@@ -48,15 +48,13 @@ func processFile(path string) {
 		line := strings.TrimSpace(scanner.Text())
 
 		for _, re := range res {
-			matches := re.FindAllStringSubmatch(line, -1)
+			matches := re.FindAllString(line, -1)
 			for _, match := range matches {
-				key := match[1]
-
 				lock.Lock()
-				if conditions[key] == nil {
-					conditions[key] = new(tbStat)
+				if conditions[match] == nil {
+					conditions[match] = new(tbStat)
 				}
-				conditions[key].Count++
+				conditions[match].Count++
 				lock.Unlock()
 			}
 		}
