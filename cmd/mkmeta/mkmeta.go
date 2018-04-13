@@ -28,7 +28,7 @@ type campaignMeta struct {
 }
 
 type fileMeta struct {
-	Vantage string `json:"vantage"`
+	Vantage string `json:"src_ip"`
 	Port    int    `json:"tcp_dst_port"`
 	Start   string `json:"_time_start"`
 	End     string `json:"_time_end"`

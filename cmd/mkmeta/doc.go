@@ -28,22 +28,22 @@ given, a file __pto_campaign_metadata.json with the file type and
 the owner. A typical file metadata file might look as follows:
 
 	{
-		"vantage": "128.10.18.52",
+		"src_ip": "128.10.18.52",
 		"dst_tcp_port": 80,
 		"_time_start": "2016-03-02T13:58:34Z",
 		"_time_end":"2016-03-04T15:01:08Z"
 	}
 
 This means that the contents of the tracebox file was created from
-the vantage point 128.10.18.52 to the destination port 80, and that
+the source IP 128.10.18.52 to the destination port 80, and that
 measurements last from 2016-03-02T13:58:34Z to 2016-03-04T15:01:08Z.
 
-The vantage point and port number are extracted from the tracebox file
+The source IP and port number are extracted from the tracebox file
 name, which must have the form
 
-	<port>-<num>-<vantage>.json
+	<port>-<num>-<src_ip>.json
 
-where <vantage> is an IPv4 address in dotted-quad notation. The program
+where <src_ip> is an IPv4 address in dotted-quad notation. The program
 will log an error if the file name does not have this format, and no
 metadata file will be written.
 */
