@@ -1,5 +1,7 @@
-// mkjson takes a tracebox file, extracts metadata information from it, and
-// then writes that metadata to stdout.
+// Copyright 2018 Zurich University of Applied Sciences.
+// All rights reserved. Use of this source code is governed
+// by a BSD-style license that can be found in the LICENSE file.
+
 package main
 
 import (
@@ -27,41 +29,51 @@ type campaignMeta struct {
 
 type fileMeta struct {
 	Vantage string `json:"vantage"`
-	Port    int    `json:"port"`
+	Port    int    `json:"tcp_dst_port"`
 	Start   string `json:"_time_start"`
 	End     string `json:"_time_end"`
 }
 
 var (
-	owner    = flag.String("owner", "", "owner of the raw data")
-	campaign = flag.Bool("with-campaign", false, "also ˘write campaign metadata")
-	filetype = flag.String("filetype", "tracebox-v1-ndjson", "file type of individual files")
+	campaign    = flag.Bool("with-campaign", false, "also write campaign metadata")
+	filetype    = flag.String("filetype", "tracebox-v1-ndjson", "file type of individual files")
+	logfileName = flag.String("logfile", "", "log file to use (default os.Stderr)")
+	owner       = flag.String("owner", "", "owner of the raw data")
 )
 
-func mustWriteJSON(object interface{}, out io.Writer) {
+var logger *log.Logger
+
+func writeJSON(object interface{}, out io.Writer) error {
 	bytes, err := json.Marshal(object)
 	if err != nil {
-		log.Fatalf("can't marshal campaign metadata: %v", err)
+		logger.Printf("ERROR: can't marshal campaign metadata: %v", err)
+		return err
 	}
 
 	n, err := out.Write(bytes)
 	if err != nil {
-		log.Fatalf("can't write campaign metadata to \"%s\": %v", pto3.CampaignMetadataFilename, err)
+		logger.Printf("ERROR: can't write campaign metadata to \"%s\": %v",
+			pto3.CampaignMetadataFilename, err)
+		return err
 	}
 
 	if n != len(bytes) {
-		log.Fatalf("campaign metadata: expected to write %d bytes, but wrote only %d", len(bytes), n)
+		logger.Printf("ERROR: expected to write %d bytes, but wrote only %d", len(bytes), n)
+		return err
 	}
+
+	return nil
 }
 
 func writeCampaignMeta() {
 	if *owner == "" {
-		log.Fatal("must set owner with \"-owner\" flag")
+		// Write this to the normal logging output, not the logger.
+		log.Fatal("FATAL: must set owner with \"-owner\" flag")
 	}
 
 	f, err := os.Create(pto3.CampaignMetadataFilename)
 	if err != nil {
-		log.Fatalf("can't open metadata file \"%s\": %v", pto3.CampaignMetadataFilename, err)
+		logger.Fatalf("can't open metadata file \"%s\": %v", pto3.CampaignMetadataFilename, err)
 	}
 
 	var cm = campaignMeta{
@@ -69,7 +81,25 @@ func writeCampaignMeta() {
 		Owner:    *owner,
 	}
 
-	mustWriteJSON(cm, f)
+	var mustRm = false
+	if writeJSON(cm, f) != nil {
+		logger.Printf("WARNING: error writing JSON for campaign metadata, not written")
+		mustRm = true
+	}
+
+	if err := f.Close(); err != nil {
+		logger.Printf("WARNING: can't close campaign metadata file: %v", err)
+	}
+
+	if mustRm {
+		if err := os.Remove(pto3.CampaignMetadataFilename); err != nil {
+			logger.Printf("WARNING: can't remove campaign metadata file: %v", err)
+		}
+	}
+
+	if mustRm {
+		os.Exit(1)
+	}
 }
 
 var tbNameRe = regexp.MustCompile(`(\d+)-(\d+)-(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.json`)
@@ -80,20 +110,22 @@ func writeFileMeta(path string) {
 
 	matches := tbNameRe.FindStringSubmatch(fname)
 	if matches == nil {
-		log.Fatalf("file name \"%s\" does not have expected form, e.g., \"80-00-129.22.123.12.json\"", fname)
+		logger.Printf("ERROR: file name \"%s\" does not have expected form, skipping", fname)
+		return
 	}
 
 	sport := matches[1]
 	port, err := strconv.ParseInt(sport, 10, 32)
 	if err != nil {
-		log.Panicf("can't happen: number \"%s\" doesn't match number regexp", matches[1])
+		logger.Panicf("can't happen: number \"%s\" doesn't match number regexp", matches[1])
 	}
 	try := matches[2]
 	vantage := fmt.Sprintf("%s.%s.%s.%s", matches[3], matches[4], matches[5], matches[6])
 
 	f, err := os.Open(path)
 	if err != nil {
-		log.Fatalf("can't open file \"%s\" for reading: %v", path, err)
+		logger.Printf("ERROR: skipping file \"%s\": %v", path, err)
+		return
 	}
 
 	scanner := bufio.NewScanner(f)
@@ -107,12 +139,12 @@ func writeFileMeta(path string) {
 		line := strings.TrimSpace(scanner.Text())
 		matches := timestampRe.FindStringSubmatch(line)
 		if matches == nil {
-			log.Fatalf("%s:%d: record without timestamp", path, lineno)
+			logger.Printf("WARNING: %s:%d: record without timestamp", path, lineno)
 		}
 
 		s, err := strconv.ParseInt(matches[1], 10, 64)
 		if err != nil {
-			log.Panicf("can't happen: number \"%s\" doesn't match number regexp", matches[1])
+			logger.Panicf("can't happen: number \"%s\" doesn't match number regexp", matches[1])
 		}
 
 		if s < minSec {
@@ -121,6 +153,10 @@ func writeFileMeta(path string) {
 		if s > maxSec {
 			maxSec = s
 		}
+	}
+
+	if err := f.Close(); err != nil {
+		logger.Printf("WARNING: error closing \"%s\": %v", path, err)
 	}
 
 	md := fileMeta{
@@ -134,21 +170,76 @@ func writeFileMeta(path string) {
 	mname := fmt.Sprintf("%s/%s-%s-%s%s", dir, sport, try, vantage, pto3.FileMetadataSuffix)
 	mdout, err := os.Create(mname)
 	if err != nil {
-		log.Fatalf("can't open metadata file \"%s\" for writing: %v", mname, err)
+		logger.Printf("ERROR: can't open metadata file \"%s\" for writing: %v", mname, err)
+		return
 	}
 
-	mustWriteJSON(md, mdout)
+	var mustRm bool
+	var hasErr bool
+	if writeJSON(md, mdout) != nil {
+		logger.Printf("WARNING: error writing metadata \"%s\" for tracebox file \"%s\", removing", mname, path)
+		mustRm = true
+		hasErr = true
+	}
 
 	if err := mdout.Close(); err != nil {
-		log.Fatalf("can't close metadata file \"%s\": %v", mname, err)
+		logger.Printf("WARNING: can't close metadata \"%s\" for tracebox file \"%s\": %v", mname, path, err)
+		hasErr = true
 	}
+
+	if mustRm {
+		if err := os.Remove(mname); err != nil {
+			logger.Printf("WARNING: can't remove metadata \"%s\" for tracebox file \"%s\": %v", mname, path, err)
+			hasErr = true
+		}
+	}
+
+	if hasErr {
+		logger.Printf("INFO: tracebox file \"%s\" processed with errors or warnings", path)
+	} else {
+		logger.Printf("INFO: tracebox file \"%s\" processed successfully", path)
+	}
+}
+
+func writeFilesMeta(paths []string) {
+	for _, p := range paths {
+		// Enhancement idea: test if p is a directory, and if yes, apply
+		// writeFileMeta() to all files in it. This may overcome problems
+		// when the directory has so many entries that a shell glob overflows
+		// a command line.
+		writeFileMeta(p)
+	}
+}
+
+func initLogging() {
+	var logfile io.Writer
+
+	if *logfileName != "" {
+		var err error
+		logfile, err = os.Create(*logfileName)
+		if err != nil {
+			log.Fatalf("can't open log file \"%s\": %v", *logfileName, err)
+		}
+	} else {
+		logfile = os.Stderr
+	}
+
+	logger = log.New(logfile, "", log.LstdFlags|log.LUTC)
+	logger.Printf("INFO: all timestamps in this log are UTC")
 }
 
 func main() {
 	flag.Parse()
 
+	initLogging()
+
 	if *campaign {
 		writeCampaignMeta()
 	}
-	writeFileMeta(flag.Arg(0))
+
+	writeFilesMeta(flag.Args())
+
+	if *logfileName != "" {
+		fmt.Printf("see log file \"%s\" for details\n", *logfileName)
+	}
 }
