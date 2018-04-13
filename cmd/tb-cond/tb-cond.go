@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"flag"
 	"fmt"
 	"log"
@@ -9,6 +8,7 @@ import (
 	"regexp"
 	"sort"
 	"sync"
+	"syscall"
 )
 
 type tbStat struct {
@@ -26,10 +26,34 @@ type job struct {
 	Path string
 }
 
-var (
-	ipRe  = regexp.MustCompile(`IP::[^"]+`)
-	tcpRe = regexp.MustCompile(`TCP::[^"]+`)
-)
+var ipTCPRe = regexp.MustCompile(`(IP|TCP)::[^"]+`)
+
+func mapFile(f *os.File) ([]byte, error) {
+	// Adapted from https://github.com/golang/exp/blob/master/mmap/mmap_unix.go
+	fi, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+
+	size := fi.Size()
+	if size < 0 {
+		return nil, fmt.Errorf("mmap: file %q has negative size", f.Name())
+	}
+	if size != int64(int(size)) {
+		return nil, fmt.Errorf("mmap: file %q is too large", f.Name())
+	}
+
+	data, err := syscall.Mmap(int(f.Fd()), 0, int(size), syscall.PROT_READ, syscall.MAP_SHARED)
+	if err != nil {
+		return nil, err
+	}
+
+	return data, nil
+}
+
+func unmapFile(bytes []byte) error {
+	return syscall.Munmap(bytes)
+}
 
 func processFile(path string) {
 	fmt.Println(path, "started")
@@ -40,23 +64,25 @@ func processFile(path string) {
 		return
 	}
 
-	var res = []*regexp.Regexp{ipRe, tcpRe}
+	bytes, err := mapFile(f)
+	if err != nil {
+		log.Printf("ERROR: can't map file \"%s\": %v", path, err)
+		return
+	}
 
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		line := scanner.Text()
-
-		for _, re := range res {
-			matches := re.FindAllString(line, -1)
-			for _, match := range matches {
-				lock.Lock()
-				if conditions[match] == nil {
-					conditions[match] = new(tbStat)
-				}
-				conditions[match].Count++
-				lock.Unlock()
-			}
+	contents := string(bytes) // causes malloc and memmove
+	matches := ipTCPRe.FindAllString(contents, -1)
+	for _, match := range matches {
+		lock.Lock()
+		if conditions[match] == nil {
+			conditions[match] = new(tbStat)
 		}
+		conditions[match].Count++
+		lock.Unlock()
+	}
+
+	if err := unmapFile(bytes); err != nil {
+		log.Printf("ERROR: can't unmap \"%s\": %v", path, err)
 	}
 	if err := f.Close(); err != nil {
 		log.Printf("ERROR: can't close \"%s\": %v", path, err)
