@@ -70,14 +70,14 @@ func processFile(path string) {
 		return
 	}
 
-	contents := string(bytes) // causes malloc and memmove
-	matches := ipTCPRe.FindAllString(contents, -1)
+	matches := ipTCPRe.FindAll(bytes, -1)
 	for _, match := range matches {
+		matchs := string(match)
 		lock.Lock()
-		if conditions[match] == nil {
-			conditions[match] = new(tbStat)
+		if conditions[matchs] == nil {
+			conditions[matchs] = new(tbStat)
 		}
-		conditions[match].Count++
+		conditions[matchs].Count++
 		lock.Unlock()
 	}
 
