@@ -20,7 +20,7 @@ type stats struct {
 	Conditions     map[string]*tbStat
 	FilesProcessed uint
 	NFiles         uint
-	TimeElapsed    float64 // in seconds
+	TimeElapsed    time.Duration
 }
 
 func newStats() *stats {
@@ -158,18 +158,20 @@ func processFiles(paths []string) *stats {
 	ticker := time.Tick(delay * time.Second)
 	workersDone := false
 	var ret = newStats()
-	var nSec uint
+	var elapsed time.Duration
 
 	for !workersDone {
 		select {
 		case <-ticker:
-			nSec += delay
+			elapsed += delay * time.Second
 			*ret = <-accumulatedStats
+			ret.TimeElapsed = elapsed
 			workersDone = ret.FilesProcessed == ret.NFiles
 			frac := float64(ret.FilesProcessed) / float64(ret.NFiles)
-			fmt.Printf("\r%d/%d = %.2f%% done, elapsed = %d sec, ETA = %g sec",
+			fmt.Printf("\r\x1b[2K%d/%d = %.2f%% done, elapsed = %s, ETA = %s",
 				ret.FilesProcessed, ret.NFiles,
-				100.0*frac, nSec, math.Round((1.0-frac)*float64(nSec)/frac))
+				100.0*frac, elapsed,
+				time.Duration(math.Round((1.0-frac)*float64(elapsed)/frac)))
 		}
 	}
 	fmt.Println()
@@ -177,8 +179,6 @@ func processFiles(paths []string) *stats {
 	for w := 1; w <= *nWorkers; w++ {
 		<-done
 	}
-
-	ret.TimeElapsed = float64(nSec)
 
 	return ret
 }
