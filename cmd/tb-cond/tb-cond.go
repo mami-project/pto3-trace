@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
 	"log"
@@ -40,8 +41,6 @@ type job struct {
 	Path string
 }
 
-var ipTCPRe = regexp.MustCompile(`(IP|TCP)::[^"]+`)
-
 func mapFile(f *os.File) ([]byte, int64, error) {
 	// Adapted from https://github.com/golang/exp/blob/master/mmap/mmap_unix.go
 	fi, err := f.Stat()
@@ -62,11 +61,47 @@ func mapFile(f *os.File) ([]byte, int64, error) {
 		return nil, 0, err
 	}
 
+	if err := madviseSequential(data); err != nil {
+		return nil, 0, err
+	}
+
 	return data, size, nil
 }
 
 func unmapFile(bytes []byte) error {
 	return syscall.Munmap(bytes)
+}
+
+var ipTCPRe = regexp.MustCompile(`(IP|TCP)::[^"]+`)
+
+// findName finds a name enclosed in "" and containing a double
+// double-colon. Examples: "IP::TTL", "IP::Checksum", "TCP::O::SACKPermitted".
+func findNextName(b []byte) (int, []byte) {
+	i := bytes.Index(b, []byte("::"))
+
+	if i == -1 {
+		return -1, nil
+	}
+
+	start := i
+	for start >= 0 && b[start] != '"' {
+		start--
+	}
+
+	if start < 0 {
+		return -1, nil
+	}
+
+	end := i
+	for end < len(b) && b[end] != '"' {
+		end++
+	}
+
+	if end >= len(b) {
+		return -1, nil
+	}
+
+	return end + 1, b[start+1 : end]
 }
 
 func processFile(path string, stats chan<- stats) {
@@ -85,13 +120,14 @@ func processFile(path string, stats chan<- stats) {
 	}
 	stat.BytesProcessed = uint64(size)
 
-	matches := ipTCPRe.FindAll(bytes, -1)
-	for _, match := range matches {
+	region := bytes
+	for end, match := findNextName(region); match != nil; end, match = findNextName(region) {
 		matchs := string(match)
 		if stat.Conditions[matchs] == nil {
 			stat.Conditions[matchs] = new(tbStat)
 		}
 		stat.Conditions[matchs].Count++
+		region = region[end:]
 	}
 
 	stats <- *stat
@@ -170,12 +206,8 @@ func processFiles(paths []string) *stats {
 			*ret = <-accumulatedStats
 			ret.TimeElapsed = elapsed
 			workersDone = ret.FilesProcessed == ret.FilesTotal
-			frac := float64(ret.FilesProcessed) / float64(ret.FilesTotal)
-			fmt.Printf("\r\x1b[2K%d/%d = %.2f%% done, elapsed = %s, ETA = %s, %s, %s",
-				ret.FilesProcessed, ret.FilesTotal,
-				100.0*frac, elapsed,
-				time.Duration(math.Round((1.0-frac)*float64(elapsed)/frac)),
-				sizeString(ret.BytesProcessed), throughputString(ret.BytesProcessed, ret.TimeElapsed))
+
+			printProgress(ret)
 		}
 	}
 	fmt.Println()
@@ -185,6 +217,15 @@ func processFiles(paths []string) *stats {
 	}
 
 	return ret
+}
+
+func printProgress(s *stats) {
+	frac := float64(s.FilesProcessed) / float64(s.FilesTotal)
+	fmt.Printf("\r\x1b[2K%d/%d = %.2f%% done, elapsed = %s, ETA = %s, %s, %s",
+		s.FilesProcessed, s.FilesTotal,
+		100.0*frac, s.TimeElapsed,
+		time.Duration(math.Round((1.0-frac)*float64(s.TimeElapsed)/frac)),
+		sizeString(s.BytesProcessed), throughputString(s.BytesProcessed, s.TimeElapsed))
 }
 
 type sizeUnit struct {
