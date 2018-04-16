@@ -19,8 +19,9 @@ type tbStat struct {
 type stats struct {
 	Conditions     map[string]*tbStat
 	FilesProcessed uint
-	NFiles         uint
+	FilesTotal     uint
 	TimeElapsed    time.Duration
+	BytesProcessed uint64
 }
 
 func newStats() *stats {
@@ -41,27 +42,27 @@ type job struct {
 
 var ipTCPRe = regexp.MustCompile(`(IP|TCP)::[^"]+`)
 
-func mapFile(f *os.File) ([]byte, error) {
+func mapFile(f *os.File) ([]byte, int64, error) {
 	// Adapted from https://github.com/golang/exp/blob/master/mmap/mmap_unix.go
 	fi, err := f.Stat()
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	size := fi.Size()
 	if size < 0 {
-		return nil, fmt.Errorf("mmap: file %q has negative size", f.Name())
+		return nil, 0, fmt.Errorf("mmap: file %q has negative size", f.Name())
 	}
 	if size != int64(int(size)) {
-		return nil, fmt.Errorf("mmap: file %q is too large", f.Name())
+		return nil, 0, fmt.Errorf("mmap: file %q is too large", f.Name())
 	}
 
 	data, err := syscall.Mmap(int(f.Fd()), 0, int(size), syscall.PROT_READ, syscall.MAP_SHARED)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	return data, nil
+	return data, size, nil
 }
 
 func unmapFile(bytes []byte) error {
@@ -77,11 +78,12 @@ func processFile(path string, stats chan<- stats) {
 		return
 	}
 
-	bytes, err := mapFile(f)
+	bytes, size, err := mapFile(f)
 	if err != nil {
 		log.Printf("ERROR: can't map file \"%s\": %v", path, err)
 		return
 	}
+	stat.BytesProcessed = uint64(size)
 
 	matches := ipTCPRe.FindAll(bytes, -1)
 	for _, match := range matches {
@@ -111,7 +113,7 @@ func worker(id int, jobs <-chan job, wstats chan<- stats, done chan<- bool) {
 
 func processStats(n uint, wstats <-chan stats, quit <-chan bool, statc chan<- stats) {
 	var conditions = newStats()
-	conditions.NFiles = n
+	conditions.FilesTotal = n
 
 	for {
 		select {
@@ -123,6 +125,7 @@ func processStats(n uint, wstats <-chan stats, quit <-chan bool, statc chan<- st
 				conditions.Conditions[k].Count += v.Count
 			}
 			conditions.FilesProcessed++
+			conditions.BytesProcessed += stat.BytesProcessed
 
 		case statc <- *conditions:
 
@@ -166,12 +169,13 @@ func processFiles(paths []string) *stats {
 			elapsed += delay * time.Second
 			*ret = <-accumulatedStats
 			ret.TimeElapsed = elapsed
-			workersDone = ret.FilesProcessed == ret.NFiles
-			frac := float64(ret.FilesProcessed) / float64(ret.NFiles)
-			fmt.Printf("\r\x1b[2K%d/%d = %.2f%% done, elapsed = %s, ETA = %s",
-				ret.FilesProcessed, ret.NFiles,
+			workersDone = ret.FilesProcessed == ret.FilesTotal
+			frac := float64(ret.FilesProcessed) / float64(ret.FilesTotal)
+			fmt.Printf("\r\x1b[2K%d/%d = %.2f%% done, elapsed = %s, ETA = %s, %s, %s",
+				ret.FilesProcessed, ret.FilesTotal,
 				100.0*frac, elapsed,
-				time.Duration(math.Round((1.0-frac)*float64(elapsed)/frac)))
+				time.Duration(math.Round((1.0-frac)*float64(elapsed)/frac)),
+				sizeString(ret.BytesProcessed), throughputString(ret.BytesProcessed, ret.TimeElapsed))
 		}
 	}
 	fmt.Println()
@@ -181,6 +185,45 @@ func processFiles(paths []string) *stats {
 	}
 
 	return ret
+}
+
+type sizeUnit struct {
+	Name   string
+	Factor float64
+}
+
+const unitFactor = 1024.0
+
+var units = []sizeUnit{
+	{Name: "B", Factor: 1.0},
+	{Name: "Kib", Factor: unitFactor},
+	{Name: "MiB", Factor: unitFactor * unitFactor},
+	{Name: "GiB", Factor: unitFactor * unitFactor * unitFactor},
+	{Name: "TiB", Factor: unitFactor * unitFactor * unitFactor * unitFactor},
+}
+
+func unit(size float64) sizeUnit {
+	for _, unit := range units {
+		throughput := size / unit.Factor
+		if throughput < unitFactor {
+			return unit
+		}
+	}
+
+	return units[len(units)-1]
+}
+
+func throughputString(bytes uint64, elapsed time.Duration) string {
+	throughput := float64(bytes) / float64(elapsed/time.Second)
+	u := unit(throughput)
+
+	return fmt.Sprintf("%.2f %s/s", throughput/u.Factor, u.Name)
+}
+
+func sizeString(bytes uint64) string {
+	u := unit(float64(bytes))
+
+	return fmt.Sprintf("%.2f %s", float64(bytes)/u.Factor, u.Name)
 }
 
 func keys(conditions map[string]*tbStat) []string {
