@@ -9,8 +9,9 @@ import (
 	"os"
 	"regexp"
 	"sort"
-	"syscall"
 	"time"
+
+	trace "github.com/mami-project/pto3-trace"
 )
 
 type tbStat struct {
@@ -39,37 +40,6 @@ var conditions = newStats()
 
 type job struct {
 	Path string
-}
-
-func mapFile(f *os.File) ([]byte, int64, error) {
-	// Adapted from https://github.com/golang/exp/blob/master/mmap/mmap_unix.go
-	fi, err := f.Stat()
-	if err != nil {
-		return nil, 0, err
-	}
-
-	size := fi.Size()
-	if size < 0 {
-		return nil, 0, fmt.Errorf("mmap: file %q has negative size", f.Name())
-	}
-	if size != int64(int(size)) {
-		return nil, 0, fmt.Errorf("mmap: file %q is too large", f.Name())
-	}
-
-	data, err := syscall.Mmap(int(f.Fd()), 0, int(size), syscall.PROT_READ, syscall.MAP_SHARED)
-	if err != nil {
-		return nil, 0, err
-	}
-
-	if err := madviseSequential(data); err != nil {
-		return nil, 0, err
-	}
-
-	return data, size, nil
-}
-
-func unmapFile(bytes []byte) error {
-	return syscall.Munmap(bytes)
 }
 
 var ipTCPRe = regexp.MustCompile(`(IP|TCP)::[^"]+`)
@@ -113,7 +83,7 @@ func processFile(path string, stats chan<- stats) {
 		return
 	}
 
-	bytes, size, err := mapFile(f)
+	bytes, size, err := trace.MapFile(f)
 	if err != nil {
 		log.Printf("ERROR: can't map file \"%s\": %v", path, err)
 		return
@@ -132,7 +102,7 @@ func processFile(path string, stats chan<- stats) {
 
 	stats <- *stat
 
-	if err := unmapFile(bytes); err != nil {
+	if err := trace.UnmapFile(bytes); err != nil {
 		log.Printf("ERROR: can't unmap \"%s\": %v", path, err)
 	}
 	if err := f.Close(); err != nil {

@@ -4,7 +4,7 @@
 
 /*
 
-Mkjson extracts PTO3 metadata information from raw tracebox files.
+Mkmeta extracts PTO3 metadata information from raw tracebox files.
 
 It assumes that the tracebox files are part of a campaign (not
 necessarily all in the same campaign), and that suitable metadata
