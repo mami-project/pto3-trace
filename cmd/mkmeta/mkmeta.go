@@ -10,6 +10,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+   "io/ioutil"
 	"log"
 	"math"
 	"os"
@@ -210,11 +211,35 @@ func writeFileMeta(path string) {
 
 func writeFilesMeta(paths []string) {
 	for _, p := range paths {
-		// Enhancement idea: test if p is a directory, and if yes, apply
-		// writeFileMeta() to all files in it. This may overcome problems
-		// when the directory has so many entries that a shell glob overflows
-		// a command line.
-		writeFileMeta(p)
+		fi, err := os.Stat(p)
+
+		if err != nil {
+			logger.Printf("WARNING: Can't stat \"%s\"", p)
+			continue
+		}
+
+		mode := fi.Mode()
+
+		if mode.IsDir() {
+			// recurse
+			
+			files, err := ioutil.ReadDir(p)
+
+			if err != nil {
+				logger.Printf("WARNING: Can't read directory \"%s\"", p)
+				continue
+			}
+
+			paths := make([]string, len(files))
+
+			for i, f := range files {
+				paths[i] = filepath.Join(p, f.Name())
+			}
+
+			writeFilesMeta(paths)
+		} else {
+			writeFileMeta(p)
+		}
 	}
 }
 
