@@ -122,8 +122,10 @@ func makeFullPath(source string, tbobs *tbObs) *pto3.Path {
 		pathString.WriteString(" *")
 	}
 
-	pathString.WriteString(" ")
-	pathString.WriteString(tbobs.Dst)
+	if tbobs.Hops[len(tbobs.Hops)-1].Address != tbobs.Dst {
+		pathString.WriteString(" ")
+		pathString.WriteString(tbobs.Dst)
+	}
 
 	return pto3.NewPath(pathString.String())
 }
