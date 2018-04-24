@@ -36,6 +36,7 @@ type tbObs struct {
 }
 
 const (
+	ipECNName                   = "IP::ECN"
 	tcpMD5SignatureOptionName   = "TCP::O::MD5SignatureOption"
 	tcpAuthenticationOptionName = "TCP::O::TCPAuthenticationOption"
 	tcpMSSOptionName            = "TCP::O::MSS"
@@ -96,6 +97,10 @@ func hasMSSChanged(hop *tbHop) (bool, string) {
 	return hasKeyModified(hop, tcpMSSOptionName)
 }
 
+func hasECNChanged(hop *tbHop) (bool, string) {
+	return hasKeyModified(hop, ipECNName)
+}
+
 func makeTbObs(start *time.Time, path *pto3.Path,
 	condition *pto3.Condition, value string) pto3.Observation {
 	var ret pto3.Observation
@@ -134,6 +139,13 @@ func appendObservation(o []pto3.Observation, start *time.Time, path *pto3.Path, 
 	return append(o, makeTbObs(start, path, makeCondition(cname), makeChange(old, new)))
 }
 
+const (
+	tcpMD5SignChangedCond = "tcp.md5signature.changed"
+	tcpAuthChangedCond    = "tcp.authentication.changed"
+	tcpMSSChangedCond     = "tcp.mss.changed"
+	tcpECNChangedCond     = "tcp.ecn.changed"
+)
+
 func extractTraceboxV1Observations(srcIP string, tcpDestPort string, line []byte) ([]pto3.Observation, error) {
 	var tbobs tbObs
 	var ret = make([]pto3.Observation, 0)
@@ -152,12 +164,12 @@ func extractTraceboxV1Observations(srcIP string, tcpDestPort string, line []byte
 
 		if has, value := hasMD5SignatureOption(h); has {
 			path = makePathForChange(path, srcIP, &tbobs, i)
-			ret = appendObservation(ret, &start, path, "tcp.md5signature.changed", md5Value, value)
+			ret = appendObservation(ret, &start, path, tcpMD5SignChangedCond, md5Value, value)
 			md5Value = value
 		}
 		if has, value := hasAuthenticationOption(h); has {
 			path = makePathForChange(path, srcIP, &tbobs, i)
-			ret = appendObservation(ret, &start, path, "tcp.authentication.changed", authValue, value)
+			ret = appendObservation(ret, &start, path, tcpAuthChangedCond, authValue, value)
 			authValue = value
 		}
 	}
@@ -168,7 +180,10 @@ func extractTraceboxV1Observations(srcIP string, tcpDestPort string, line []byte
 		// of MSS in between?
 		path := makeFullPath(srcIP, &tbobs)
 		if has, value := hasMSSChanged(tbobs.Hops[len(tbobs.Hops)-1]); has {
-			ret = appendObservation(ret, &start, path, "tcp.mss.changed", "", value)
+			ret = appendObservation(ret, &start, path, tcpMSSChangedCond, "", value)
+		}
+		if has, value := hasECNChanged(tbobs.Hops[len(tbobs.Hops)-1]); has {
+			ret = appendObservation(ret, &start, path, tcpECNChangedCond, "", value)
 		}
 	}
 

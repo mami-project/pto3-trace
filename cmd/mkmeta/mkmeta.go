@@ -28,10 +28,11 @@ type campaignMeta struct {
 }
 
 type fileMeta struct {
-	Vantage string `json:"src_ip"`
-	Port    int    `json:"tcp_dst_port"`
-	Start   string `json:"_time_start"`
-	End     string `json:"_time_end"`
+	campaignMeta        // For consolidation. Leave empty if not consolidating
+	Vantage      string `json:"src_ip"`
+	Port         int    `json:"tcp_dst_port"`
+	Start        string `json:"_time_start"`
+	End          string `json:"_time_end"`
 }
 
 var (
@@ -39,6 +40,7 @@ var (
 	filetype    = flag.String("filetype", "tracebox-v1-ndjson", "file type of individual files")
 	logfileName = flag.String("logfile", "", "log file to use (default os.Stderr)")
 	owner       = flag.String("owner", "", "owner of the raw data")
+	consolidate = flag.Bool("consolidate", false, "consolidate campaign and file metadata into single file (useful for debugging)")
 )
 
 var logger *log.Logger
@@ -164,6 +166,11 @@ func writeFileMeta(path string) {
 		Port:    int(port),
 		Start:   time.Unix(minSec, 0).UTC().Format(time.RFC3339),
 		End:     time.Unix(maxSec, 0).UTC().Format(time.RFC3339),
+	}
+
+	if *consolidate {
+		md.FileType = *filetype
+		md.Owner = *owner
 	}
 
 	dir := filepath.Dir(path)
