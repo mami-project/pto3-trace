@@ -148,16 +148,18 @@ const (
 
 func extractTraceboxV1Observations(srcIP string, tcpDestPort string, line []byte) ([]pto3.Observation, error) {
 	var tbobs tbObs
-	var ret = make([]pto3.Observation, 0)
 
 	if err := json.Unmarshal(line, &tbobs); err != nil {
 		return nil, err
 	}
 
+	var ret = make([]pto3.Observation, 0)
 	start := time.Unix(tbobs.Timestamp, 0)
 
 	var md5Value string
 	var authValue string
+	var ecnValue string
+	var mssValue string
 
 	for i, h := range tbobs.Hops {
 		var path *pto3.Path
@@ -172,19 +174,32 @@ func extractTraceboxV1Observations(srcIP string, tcpDestPort string, line []byte
 			ret = appendObservation(ret, &start, path, tcpAuthChangedCond, authValue, value)
 			authValue = value
 		}
+		if has, value := hasMSSChanged(h); has {
+			path = makePathForChange(path, srcIP, &tbobs, i)
+			ret = appendObservation(ret, &start, path, tcpMSSChangedCond, mssValue, value)
+			mssValue = value
+		}
+		if has, value := hasECNChanged(h); has {
+			path = makePathForChange(path, srcIP, &tbobs, i)
+			ret = appendObservation(ret, &start, path, tcpECNChangedCond, ecnValue, value)
+			ecnValue = value
+		}
 	}
 
 	if len(tbobs.Hops) > 0 {
 		// According to the standard, MSS can only change on the last hop.
 		// TODO: should we check (and report) potentially erroneous changes
 		// of MSS in between?
-		path := makeFullPath(srcIP, &tbobs)
-		if has, value := hasMSSChanged(tbobs.Hops[len(tbobs.Hops)-1]); has {
-			ret = appendObservation(ret, &start, path, tcpMSSChangedCond, "", value)
-		}
-		if has, value := hasECNChanged(tbobs.Hops[len(tbobs.Hops)-1]); has {
-			ret = appendObservation(ret, &start, path, tcpECNChangedCond, "", value)
-		}
+		// TODO: extract traceroute.tcp.worked and .failed
+		/*
+			path := makeFullPath(srcIP, &tbobs)
+			if has, value := hasMSSChanged(tbobs.Hops[len(tbobs.Hops)-1]); has {
+				ret = appendObservation(ret, &start, path, tcpMSSChangedCond, "", value)
+			}
+			if has, value := hasECNChanged(tbobs.Hops[len(tbobs.Hops)-1]); has {
+				ret = appendObservation(ret, &start, path, tcpECNChangedCond, "", value)
+			}
+		*/
 	}
 
 	return ret, nil
