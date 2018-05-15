@@ -57,7 +57,7 @@ package main
         1037 TCP::O::PartialOrderConnectionPermitted | NEW tcp.partial-order-connection-permitted.changed
         1028 TCP::O::TCPAlternateChecksumRequest | NEW tcp.alternate-checksum-request.changed
          940 TCP::O::SACK                    | NEW tcp.sack.changed
-         903 TCP::O::SNAP                    | NEW tcp.smap.changed
+         903 TCP::O::SNAP                    | NEW tcp.snap.changed
          864 TCP::O::(null)                  | Ignore
          828 TCP::O::UserTimeoutOption       | NEW tcp.user-timeout-option.changed
          682 TCP::O::TrailerChecksumOption   | NEW tcp.trailer-checksum-option.changed
@@ -156,22 +156,6 @@ func hasOption(hop *tbHop, name string) (bool, string) {
 	return false, ""
 }
 
-func hasMD5SignatureOption(hop *tbHop) (bool, string) {
-	return hasOption(hop, tcpMD5SignatureOptionName)
-}
-
-func hasAuthenticationOption(hop *tbHop) (bool, string) {
-	return hasOption(hop, tcpAuthenticationOptionName)
-}
-
-func hasMSSChanged(hop *tbHop) (bool, string) {
-	return hasKeyModified(hop, tcpMSSOptionName)
-}
-
-func hasECNChanged(hop *tbHop) (bool, string) {
-	return hasKeyModified(hop, ipECNName)
-}
-
 func makeTbObs(start *time.Time, path *pto3.Path,
 	condition *pto3.Condition, value string) pto3.Observation {
 	var ret pto3.Observation
@@ -235,10 +219,10 @@ func extractTraceboxV1Observations(srcIP string, tcpDestPort string, line []byte
 	for i, h := range tbobs.Hops {
 		var path *pto3.Path
 
-		for tbOpt, ptoCond := range tbToCond {
-			if has, value := hasOption(h, tbOpt); has {
+		for _, m := range h.Modifications {
+			if ptoCond, ok := tbToCond[m.Name]; ok {
 				path = makePathForChange(path, srcIP, &tbobs, i)
-				ret = appendObservation(ret, &start, path, ptoCond, value)
+				ret = appendObservation(ret, &start, path, ptoCond, m.Value)
 			}
 		}
 	}
