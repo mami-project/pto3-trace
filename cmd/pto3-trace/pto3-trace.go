@@ -22,7 +22,8 @@ package main
 	 middlebox may well add or change.
 
    The format of the table below is crucial, since it is being automatically
-   processed by extract-conditions.pl
+   processed by extract-conditions.pl. So you can't remove this table, only
+   change the Decision column.
 
   Count     | Name                           | Decision
   ==========+================================+=====================
@@ -106,56 +107,6 @@ type tbObs struct {
 	Hops      []*tbHop `json:"h"`
 }
 
-const (
-	ipECNName                   = "IP::ECN"
-	tcpMD5SignatureOptionName   = "TCP::O::MD5SignatureOption"
-	tcpAuthenticationOptionName = "TCP::O::TCPAuthenticationOption"
-	tcpMSSOptionName            = "TCP::O::MSS"
-)
-
-func containsKey(nv []nameValue, key string) (bool, string) {
-	for _, v := range nv {
-		if v.Name == key {
-			return true, v.Value
-		}
-	}
-	return false, ""
-}
-
-func hasKeyAdded(hop *tbHop, key string) (bool, string) {
-	if c, v := containsKey(hop.Additions, key); c {
-		return true, v
-	}
-	return false, ""
-}
-
-func hasKeyDeleted(hop *tbHop, key string) bool {
-	if c, _ := containsKey(hop.Deletions, key); c {
-		return true
-	}
-	return false
-}
-
-func hasKeyModified(hop *tbHop, key string) (bool, string) {
-	if c, v := containsKey(hop.Modifications, key); c {
-		return c, v
-	}
-	return false, ""
-}
-
-func hasOption(hop *tbHop, name string) (bool, string) {
-	if c, v := hasKeyAdded(hop, name); c {
-		return c, v
-	}
-	if hasKeyDeleted(hop, name) {
-		return true, ""
-	}
-	if c, v := hasKeyModified(hop, name); c {
-		return c, v
-	}
-	return false, ""
-}
-
 func makeTbObs(start *time.Time, path *pto3.Path,
 	condition *pto3.Condition, value string) pto3.Observation {
 	var ret pto3.Observation
@@ -180,10 +131,6 @@ func makeCondition(name string) *pto3.Condition {
 	condCache[name] = ret
 
 	return ret
-}
-
-func isTimedOut(tbobs *tbObs) bool {
-	return tbobs.Reason == "timeouted" // sic!
 }
 
 func toHexString(s string) string {
@@ -225,22 +172,6 @@ func extractTraceboxV1Observations(srcIP string, tcpDestPort string, line []byte
 				ret = appendObservation(ret, &start, path, ptoCond, m.Value)
 			}
 		}
-	}
-
-	if len(tbobs.Hops) > 0 {
-		// According to the standard, MSS can only change on the last hop.
-		// TODO: should we check (and report) potentially erroneous changes
-		// of MSS in between?
-		// TODO: extract traceroute.tcp.worked and .failed
-		/*
-			path := makeFullPath(srcIP, &tbobs)
-			if has, value := hasMSSChanged(tbobs.Hops[len(tbobs.Hops)-1]); has {
-				ret = appendObservation(ret, &start, path, tcpMSSChangedCond, "", value)
-			}
-			if has, value := hasECNChanged(tbobs.Hops[len(tbobs.Hops)-1]); has {
-				ret = appendObservation(ret, &start, path, tcpECNChangedCond, "", value)
-			}
-		*/
 	}
 
 	return ret, nil
