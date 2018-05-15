@@ -18,3 +18,10 @@ data/
 
 # Output directory, contains program output
 out/
+
+# Generated source
+cmd/pto3-trace/conditions.go
+
+# Binaries
+tb-cond
+mkmeta

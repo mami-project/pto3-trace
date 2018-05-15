@@ -1,5 +1,75 @@
 package main
 
+//go:generate perl extract-conditions.pl pto3-trace.go conditions.go
+
+/*
+   The following conditions were extracted from the tracebox files. On the left
+   is the count how often the condition was observed, then comes  the condition
+   name as it appears in the tracebox files.
+
+   On the right is the decision what we decided to do with the condition.
+
+   * Ignore means the condition is ignored, either because it is so numerous
+	 as to be meaningless or so rare that it's not clear what the precise
+	 semantics are. Another reason is that the condition represents something
+	 that the *endpoint* did, in which case we're not interested. (We're only
+	 interested in what britram refers to as "middlebox fuckery".)
+   * tcp.<cond>.changed means that the condition is processed and turned into
+	 the relevant PTO condition.
+   * Nothing. In this case, it's not clear what to do with the tracebox condition,
+	 for example because it's not clear whether it represents middlebox fuckery
+	 (see above) or whether it's something that a reasonable
+	 middlebox may well add or change.
+
+   The format of the table below is crucial, since it is being automatically
+   processed by extract-conditions.pl
+
+  Count     | Name                           | Decision
+  ==========+================================+=====================
+  9171447313 IP::Checksum                    | Ignore
+  9171446541 IP::TTL                         | Ignore
+  1279130958 IP::DiffServicesCP              | Ignore
+   326560370 TCP::O::MSS                     | tcp.mss.changed
+   260492548 TCP::Checksum                   | Ignore
+   172780786 TCP::SeqNumber                  | Ignore
+    21264366 TCP::O::SACKPermitted           | NEW tcp.sack-permitted.changed
+     5460040 IP::Length                      | NEW tcp.length.changed
+     1960762 TCP::Offset                     | NEW tcp.offset.changed
+      489556 IP::ID                          | NEW tcp.id.changed
+       75071 TCP::Window                     | NEW tcp.window.changed
+       68811 TCP::O::WSOPT-WindowScale       | NEW tcp.wsopt-windows-scale.changed
+       16568 TCP::O::TSOPT-TimeStampOption   | NEW tcp.tsopt-timestamp-option.changed
+       14606 TCP::Flags                      | NEW tcp.flags.changed
+       13120 IP::ECN                         | tcp.ecn.changed
+        9644 TCP::SPort                      | NEW tcp.sport.changed
+        8313 IP::Flags                       | NEW ip.flags.changed
+        5797 TCP::AckNumber                  | NEW tcp.ack-number.changed
+        4646 TCP::UrgentPtr                  | NEW tcp.urgent-ptr.changed
+        4143 TCP::Reserved                   | NEW tcp.reserved.changed
+        3403 TCP::O::TCPAuthenticationOption | tcp.authentication-option.changed
+        3172 TCP::O::Echo                    | NEW tcp.echo.changed
+        3138 TCP::O::CC                      | NEW tcp.cc.changed
+        2465 TCP::O::CC.ECHO                 | NEW tcp.cc-echo.changed
+        1335 TCP::O::MD5SignatureOption      | tcp.md5-signature.changed
+        1230 TCP::O::CC.NEW                  | NEW tcp.cc-new.changed
+        1088 TCP::O::Quick-StartResponse     | NEW tcp.quick-startresponse.changed
+        1055 TCP::O::EchoReply               | NEW tcp.echo-reply.changed
+        1037 TCP::O::PartialOrderConnectionPermitted | NEW tcp.partial-order-connection-permitted.changed
+        1028 TCP::O::TCPAlternateChecksumRequest | NEW tcp.alternate-checksum-request.changed
+         940 TCP::O::SACK                    | NEW tcp.sack.changed
+         903 TCP::O::SNAP                    | NEW tcp.smap.changed
+         864 TCP::O::(null)                  | Ignore
+         828 TCP::O::UserTimeoutOption       | NEW tcp.user-timeout-option.changed
+         682 TCP::O::TrailerChecksumOption   | NEW tcp.trailer-checksum-option.changed
+         677 TCP::O::SCPSCapabilities        | NEW tcp.scps-capabilities.changed
+         660 TCP::O::TCPAlternateChecksumData | NEW tcp.alternate-checksum-data.changed
+         647 TCP::O::PartialOrderServiceProfile | NEW tcp.partial-order-service-profile.changed
+         587 TCP::O::SelectiveNegativeAck    | NEW tcp.selective-negative-ack.changed
+         526 TCP::O::RecordBoundaries        | NEW tcp.record-boundaries.changed
+         525 TCP::O::MultipathTCP            | NEW tcp.multipath-tcp.changed
+         458 TCP::O::CorruptionExperienced   | NEW tcp.corruption-experienced.changed
+
+*/
 import (
 	"bufio"
 	"bytes"
@@ -8,6 +78,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"strconv"
 	"time"
 
 	pto3 "github.com/mami-project/pto3-go"
@@ -131,23 +202,25 @@ func isTimedOut(tbobs *tbObs) bool {
 	return tbobs.Reason == "timeouted" // sic!
 }
 
-func makeChange(old, new string) string {
-	if old == "" {
-		return fmt.Sprintf("{\"new\":\"%s\"}", new)
+func toHexString(s string) string {
+	num, err := strconv.ParseInt(s, 16, 64)
+
+	if err == nil {
+		return fmt.Sprintf("0x%x", num)
 	}
-	return fmt.Sprintf("{\"old\":\"%s\",\"new\":\"%s\"}", old, new)
+	return ""
 }
 
-func appendObservation(o []pto3.Observation, start *time.Time, path *pto3.Path, cname string, old, new string) []pto3.Observation {
-	return append(o, makeTbObs(start, path, makeCondition(cname), makeChange(old, new)))
+func makeChange(new string) string {
+	if numberString := toHexString(new); numberString != "" {
+		return numberString
+	}
+	return new
 }
 
-const (
-	tcpMD5SignChangedCond = "tcp.md5signature.changed"
-	tcpAuthChangedCond    = "tcp.authentication.changed"
-	tcpMSSChangedCond     = "tcp.mss.changed"
-	tcpECNChangedCond     = "tcp.ecn.changed"
-)
+func appendObservation(o []pto3.Observation, start *time.Time, path *pto3.Path, cname string, new string) []pto3.Observation {
+	return append(o, makeTbObs(start, path, makeCondition(cname), makeChange(new)))
+}
 
 func extractTraceboxV1Observations(srcIP string, tcpDestPort string, line []byte) ([]pto3.Observation, error) {
 	var tbobs tbObs
@@ -159,33 +232,14 @@ func extractTraceboxV1Observations(srcIP string, tcpDestPort string, line []byte
 	var ret = make([]pto3.Observation, 0)
 	start := time.Unix(tbobs.Timestamp, 0)
 
-	var md5Value string
-	var authValue string
-	var ecnValue string
-	var mssValue string
-
 	for i, h := range tbobs.Hops {
 		var path *pto3.Path
 
-		if has, value := hasMD5SignatureOption(h); has {
-			path = makePathForChange(path, srcIP, &tbobs, i)
-			ret = appendObservation(ret, &start, path, tcpMD5SignChangedCond, md5Value, value)
-			md5Value = value
-		}
-		if has, value := hasAuthenticationOption(h); has {
-			path = makePathForChange(path, srcIP, &tbobs, i)
-			ret = appendObservation(ret, &start, path, tcpAuthChangedCond, authValue, value)
-			authValue = value
-		}
-		if has, value := hasMSSChanged(h); has {
-			path = makePathForChange(path, srcIP, &tbobs, i)
-			ret = appendObservation(ret, &start, path, tcpMSSChangedCond, mssValue, value)
-			mssValue = value
-		}
-		if has, value := hasECNChanged(h); has {
-			path = makePathForChange(path, srcIP, &tbobs, i)
-			ret = appendObservation(ret, &start, path, tcpECNChangedCond, ecnValue, value)
-			ecnValue = value
+		for tbOpt, ptoCond := range tbToCond {
+			if has, value := hasOption(h, tbOpt); has {
+				path = makePathForChange(path, srcIP, &tbobs, i)
+				ret = appendObservation(ret, &start, path, ptoCond, value)
+			}
 		}
 	}
 
