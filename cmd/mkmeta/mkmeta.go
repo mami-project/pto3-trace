@@ -26,7 +26,7 @@ import (
 type campaignMeta struct {
 	FileType string `json:"_file_type"`
 	Owner    string `json:"_owner"`
-	TCPFlags string `json:"_presumed_tcp_flags"`
+	TCPFlags string `json:"presumed_tcp_flags"`
 }
 
 type fileMeta struct {
