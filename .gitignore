@@ -22,6 +22,7 @@ out/
 # Generated source
 cmd/pto3-trace/conditions.go
 gitref.go
+__pto_campaign_metadata.json
 
 # Binaries
 tb-cond
