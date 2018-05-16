@@ -6,6 +6,6 @@ my $commit = <$fh>; chomp($commit);
 close($fh) or warn "can't close pipe to git (ignored): $!";
 
 open my $out, '>', $ARGV[0] or die "can't open output file $ARGV[0]: $!";
-print $out "package main\n\n";
-print $out "const commitRef = \"", $commit, "\"\n";
+print $out "package pto3trace\n\n";
+print $out "const CommitRef = \"", $commit, "\"\n";
 close $out or warn "can't close output file $ARGV[1]: $!";

@@ -1,8 +1,12 @@
-package main
+// Copyright 2018 Zurich University of Applied Sciences.
+// All rights reserved. Use of this source code is governed
+// by a BSD-style license that can be found in the LICENSE file.
 
 //go:generate perl extract-conditions.pl pto3-trace.go conditions.go
 
-//go:generate perl gitref.pl gitref.go
+//go:generate perl ../../gitref.pl gitref.go
+
+package main
 
 /*
    The following conditions were extracted from the tracebox files. On the left
@@ -77,6 +81,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -107,6 +112,11 @@ type tbObs struct {
 	Reason    string   `json:"r"`
 	Timestamp int64    `json:"s"`
 	Hops      []*tbHop `json:"h"`
+}
+
+func usage() {
+	fmt.Fprintf(flag.CommandLine.Output(), "%s, git ref %s\n", os.Args[0], trace.CommitRef)
+	flag.PrintDefaults()
 }
 
 func makeTbObs(start *time.Time, path *pto3.Path,
@@ -241,7 +251,7 @@ func normalizeTrace(rawBytes []byte, metain io.Reader, out io.Writer) error {
 	mdout["_time_end"] = md.TimeEnd(true).Format(time.RFC3339)
 
 	// hardcode analyzer path (FIXME, tag?)
-	mdout["_analyzer"] = "https://github.com/mami-project/pto3-trace/tree/" + commitRef + "/cmd/pto3-trace/pto3-trace.json"
+	mdout["_analyzer"] = "https://github.com/mami-project/pto3-trace/tree/" + trace.CommitRef + "/cmd/pto3-trace/pto3-trace.json"
 
 	bytes, err := json.Marshal(mdout)
 	if err != nil {
@@ -256,6 +266,9 @@ func normalizeTrace(rawBytes []byte, metain io.Reader, out io.Writer) error {
 }
 
 func main() {
+	flag.Usage = usage
+	flag.Parse()
+
 	mdfile := os.NewFile(3, ".piped_metadata.json")
 
 	bytes, _, err := trace.MapFile(os.Stdin)

@@ -21,7 +21,7 @@ out/
 
 # Generated source
 cmd/pto3-trace/conditions.go
-cmd/pto3-trace/gitref.go
+gitref.go
 
 # Binaries
 tb-cond

@@ -2,6 +2,8 @@
 // All rights reserved. Use of this source code is governed
 // by a BSD-style license that can be found in the LICENSE file.
 
+//go:generate perl ../../gitref.pl gitref.go
+
 package main
 
 import (
@@ -20,7 +22,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mami-project/pto3-go"
+	pto3 "github.com/mami-project/pto3-go"
+	trace "github.com/mami-project/pto3-trace"
 )
 
 type campaignMeta struct {
@@ -59,6 +62,11 @@ var (
 )
 
 var logger *log.Logger
+
+func usage() {
+	fmt.Fprintf(flag.CommandLine.Output(), "%s, git ref %s\n", os.Args[0], trace.CommitRef)
+	flag.PrintDefaults()
+}
 
 func writeJSON(object interface{}, out io.Writer) error {
 	bytes, err := json.Marshal(object)
@@ -277,6 +285,7 @@ func initLogging() {
 }
 
 func main() {
+	flag.Usage = usage
 	flag.Parse()
 
 	initLogging()
