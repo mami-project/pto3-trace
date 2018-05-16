@@ -10,7 +10,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
-   "io/ioutil"
+	"io/ioutil"
 	"log"
 	"math"
 	"os"
@@ -26,6 +26,7 @@ import (
 type campaignMeta struct {
 	FileType string `json:"_file_type"`
 	Owner    string `json:"_owner"`
+	TCPFlags string `json:"_presumed_tcp_flags"`
 }
 
 type fileMeta struct {
@@ -41,6 +42,7 @@ var (
 	filetype    = flag.String("filetype", "tracebox-v1-ndjson", "file type of individual files")
 	logfileName = flag.String("logfile", "", "log file to use (default os.Stderr)")
 	owner       = flag.String("owner", "", "owner of the raw data")
+	tcpFlags    = flag.String("tcp-flags", "0x2", "presumed TCP flags for this tracebox campaign")
 	consolidate = flag.Bool("consolidate", false, "consolidate campaign and file metadata into single file (useful for debugging)")
 )
 
@@ -82,6 +84,7 @@ func writeCampaignMeta() {
 	var cm = campaignMeta{
 		FileType: *filetype,
 		Owner:    *owner,
+		TCPFlags: *tcpFlags,
 	}
 
 	var mustRm = false
@@ -222,7 +225,7 @@ func writeFilesMeta(paths []string) {
 
 		if mode.IsDir() {
 			// recurse
-			
+
 			files, err := ioutil.ReadDir(p)
 
 			if err != nil {

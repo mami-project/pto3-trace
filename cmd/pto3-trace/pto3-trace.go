@@ -52,7 +52,7 @@ package main
         3403 TCP::O::TCPAuthenticationOption | tcp.option.ao.changed
         3172 TCP::O::Echo                    | NEW tcp.option.rfc1072.echo.changed
         3138 TCP::O::CC                      | NEW tcp.option.rfc1644.cc.changed
-        2465 TCP::O::CC.ECHO                 | NEW tcp.option.rfc1644.echo.changed
+        2465 TCP::O::CC.ECHO                 | NEW tcp.option.rfc1644.ech,mo.changed
         1335 TCP::O::MD5SignatureOption      | tcp.option.md5.changed
         1230 TCP::O::CC.NEW                  | NEW tcp.option.rfc1644.new.changed
         1088 TCP::O::Quick-StartResponse     | NEW tcp.option.rfc4782.changed
