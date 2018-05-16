@@ -26,7 +26,18 @@ import (
 type campaignMeta struct {
 	FileType string `json:"_file_type"`
 	Owner    string `json:"_owner"`
+
+	// The value we assume for the TCP flags. Tracebox measures
+	// changes to the flags, but doesn't say what the flags were
+	// changed from.
 	TCPFlags string `json:"presumed_tcp_flags"`
+
+	// The value we assume for the timezone in which the measurements
+	// are taken. Tracebox does not record the time zone. The timezone
+	// can be either an official timezone, such as "GMT+2", "CEST", or
+	// "UTC", or an assumed timezone, which takes the form "ProbablyTZ",
+	// e.g., "ProbablyGMT+2", "ProbablyCEST", "ProbablyUTC".
+	Timezone string `json:"presumed_timezone"`
 }
 
 type fileMeta struct {
@@ -39,11 +50,12 @@ type fileMeta struct {
 
 var (
 	campaign    = flag.Bool("with-campaign", false, "also write campaign metadata")
+	consolidate = flag.Bool("consolidate", false, "consolidate campaign and file metadata into single file (useful for debugging)")
 	filetype    = flag.String("filetype", "tracebox-v1-ndjson", "file type of individual files")
 	logfileName = flag.String("logfile", "", "log file to use (default os.Stderr)")
 	owner       = flag.String("owner", "", "owner of the raw data")
 	tcpFlags    = flag.String("tcp-flags", "0x2", "presumed TCP flags for this tracebox campaign")
-	consolidate = flag.Bool("consolidate", false, "consolidate campaign and file metadata into single file (useful for debugging)")
+	timezone    = flag.String("timezone", "ProbablyUTC", "timezone for time stamps")
 )
 
 var logger *log.Logger
@@ -85,6 +97,7 @@ func writeCampaignMeta() {
 		FileType: *filetype,
 		Owner:    *owner,
 		TCPFlags: *tcpFlags,
+		Timezone: *timezone,
 	}
 
 	var mustRm = false

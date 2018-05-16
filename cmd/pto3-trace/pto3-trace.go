@@ -243,13 +243,6 @@ func normalizeTrace(rawBytes []byte, metain io.Reader, out io.Writer) error {
 	// hardcode analyzer path (FIXME, tag?)
 	mdout["_analyzer"] = "https://github.com/mami-project/pto3-trace/tree/" + commitRef + "/cmd/pto3-trace/pto3-trace.json"
 
-	// state uncertainty about timestamp timezone, as per
-	// conversation with britram. This value, "uncertain"
-	// means that essentially anything goes, not even
-	// timezones between measurements are required to be in
-	// the same timezone. Later values may be more precise
-	mdout["obs_tz"] = "uncertain"
-
 	bytes, err := json.Marshal(mdout)
 	if err != nil {
 		return fmt.Errorf("error marshaling metadata: %s", err.Error())
