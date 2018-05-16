@@ -35,12 +35,12 @@ type campaignMeta struct {
 	// changed from.
 	TCPFlags string `json:"presumed_tcp_flags"`
 
-	// The value we assume for the timezone in which the measurements
-	// are taken. Tracebox does not record the time zone. The timezone
-	// can be either an official timezone, such as "GMT+2", "CEST", or
-	// "UTC", or an assumed timezone, which takes the form "ProbablyTZ",
-	// e.g., "ProbablyGMT+2", "ProbablyCEST", "ProbablyUTC".
-	Timezone string `json:"presumed_timezone"`
+	// The value for the timezone in which the measurements are taken.
+	// Tracebox does not record the time zone. The timezone can be either
+	// an official timezone, such as "GMT+2", "CEST", or "UTC", or an
+	// assumed timezone, which takes the form "ProbablyTZ", e.g.,
+	// "ProbablyGMT+2", "ProbablyCEST", "ProbablyUTC".
+	Timezone string `json:"timezone"`
 }
 
 type fileMeta struct {
