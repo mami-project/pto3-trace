@@ -2,6 +2,8 @@ package main
 
 //go:generate perl extract-conditions.pl pto3-trace.go conditions.go
 
+//go:generate perl gitref.pl gitref.go
+
 /*
    The following conditions were extracted from the tracebox files. On the left
    is the count how often the condition was observed, then comes  the condition
@@ -239,7 +241,7 @@ func normalizeTrace(rawBytes []byte, metain io.Reader, out io.Writer) error {
 	mdout["_time_end"] = md.TimeEnd(true).Format(time.RFC3339)
 
 	// hardcode analyzer path (FIXME, tag?)
-	mdout["_analyzer"] = "https://github.com/mami-project/pto3-trace/tree/master/cmd/pto3-trace/pto3-trace.json"
+	mdout["_analyzer"] = "https://github.com/mami-project/pto3-trace/tree/" + commitRef + "/cmd/pto3-trace/pto3-trace.json"
 
 	// state uncertainty about timestamp timezone, as per
 	// conversation with britram. This value, "uncertain"
