@@ -32,13 +32,13 @@ package main
   9171447313 IP::Checksum                    | Ignore
   9171446541 IP::TTL                         | Ignore
   1279130958 IP::DiffServicesCP              | Ignore
-   326560370 TCP::O::MSS                     | tcp.mss.changed
+   326560370 TCP::O::MSS                     | tcp.option.mss.changed
    260492548 TCP::Checksum                   | Ignore
    172780786 TCP::SeqNumber                  | Ignore
-    21264366 TCP::O::SACKPermitted           | NEW tcp.sack-permitted.changed
+    21264366 TCP::O::SACKPermitted           | NEW tcp.option.sackok.changed
      5460040 IP::Length                      | NEW tcp.length.changed
      1960762 TCP::Offset                     | NEW tcp.offset.changed
-      489556 IP::ID                          | NEW tcp.id.changed
+      489556 IP::ID                          | NEW ip4.id.changed
        75071 TCP::Window                     | NEW tcp.window.changed
        68811 TCP::O::WSOPT-WindowScale       | NEW tcp.option.ws.changed
        16568 TCP::O::TSOPT-TimeStampOption   | NEW tcp.option.ts.changed
@@ -46,31 +46,31 @@ package main
        13120 IP::ECN                         | ecn.ip.changed
         9644 TCP::SPort                      | NEW tcp.sport.changed
         8313 IP::Flags                       | NEW ip.flags.changed
-        5797 TCP::AckNumber                  | NEW tcp.ack-number.changed
-        4646 TCP::UrgentPtr                  | NEW tcp.urgent-ptr.changed
+        5797 TCP::AckNumber                  | NEW tcp.ack.changed
+        4646 TCP::UrgentPtr                  | NEW tcp.urg.changed
         4143 TCP::Reserved                   | NEW tcp.reserved.changed
-        3403 TCP::O::TCPAuthenticationOption | tcp.option.authentication.changed
-        3172 TCP::O::Echo                    | NEW tcp.echo.changed
-        3138 TCP::O::CC                      | NEW tcp.cc.changed
-        2465 TCP::O::CC.ECHO                 | NEW tcp.cc-echo.changed
-        1335 TCP::O::MD5SignatureOption      | tcp.option.md5-signature.changed
-        1230 TCP::O::CC.NEW                  | NEW tcp.cc-new.changed
-        1088 TCP::O::Quick-StartResponse     | NEW tcp.quick-startresponse.changed
-        1055 TCP::O::EchoReply               | NEW tcp.echo-reply.changed
-        1037 TCP::O::PartialOrderConnectionPermitted | NEW tcp.partial-order-connection-permitted.changed
-        1028 TCP::O::TCPAlternateChecksumRequest | NEW tcp.alternate-checksum-request.changed
-         940 TCP::O::SACK                    | NEW tcp.sack.changed
-         903 TCP::O::SNAP                    | NEW tcp.snap.changed
+        3403 TCP::O::TCPAuthenticationOption | tcp.option.ao.changed
+        3172 TCP::O::Echo                    | NEW tcp.option.rfc1072.echo.changed
+        3138 TCP::O::CC                      | NEW tcp.option.rfc1644.cc.changed
+        2465 TCP::O::CC.ECHO                 | NEW tcp.option.rfc1644.echo.changed
+        1335 TCP::O::MD5SignatureOption      | tcp.option.md5.changed
+        1230 TCP::O::CC.NEW                  | NEW tcp.option.rfc1644.new.changed
+        1088 TCP::O::Quick-StartResponse     | NEW tcp.option.rfc4782.changed
+        1055 TCP::O::EchoReply               | NEW tcp.option.rfc1072.reply.changed
+        1037 TCP::O::PartialOrderConnectionPermitted | NEW tcp.option.rfc1693.permitted.changed
+        1028 TCP::O::TCPAlternateChecksumRequest | NEW tcp.option.rfc1146.request.changed
+         940 TCP::O::SACK                    | NEW tcp.option.sack.changed
+         903 TCP::O::SNAP                    | NEW tcp.option.snap.changed
          864 TCP::O::(null)                  | Ignore
          828 TCP::O::UserTimeoutOption       | NEW tcp.option.user-timeout.changed
          682 TCP::O::TrailerChecksumOption   | NEW tcp.option.trailer-checksum.changed
-         677 TCP::O::SCPSCapabilities        | NEW tcp.scps-capabilities.changed
-         660 TCP::O::TCPAlternateChecksumData | NEW tcp.alternate-checksum-data.changed
-         647 TCP::O::PartialOrderServiceProfile | NEW tcp.partial-order-service-profile.changed
-         587 TCP::O::SelectiveNegativeAck    | NEW tcp.selective-negative-ack.changed
-         526 TCP::O::RecordBoundaries        | NEW tcp.record-boundaries.changed
-         525 TCP::O::MultipathTCP            | NEW tcp.multipath-tcp.changed
-         458 TCP::O::CorruptionExperienced   | NEW tcp.corruption-experienced.changed
+         677 TCP::O::SCPSCapabilities        | NEW tcp.option.scps-capabilities.changed
+         660 TCP::O::TCPAlternateChecksumData | NEW tcp.option.rfc1146.data.changed
+         647 TCP::O::PartialOrderServiceProfile | NEW tcp.option.rfc1693.profile.changed
+         587 TCP::O::SelectiveNegativeAck    | NEW tcp.option.selective-nack.changed
+         526 TCP::O::RecordBoundaries        | NEW tcp.option.record-boundaries.changed
+         525 TCP::O::MultipathTCP            | NEW tcp.option.mptcp.changed
+         458 TCP::O::CorruptionExperienced   | NEW tcp.option.corruption-experienced.changed
 
 */
 import (
