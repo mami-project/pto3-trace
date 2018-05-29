@@ -44,11 +44,11 @@ type campaignMeta struct {
 }
 
 type fileMeta struct {
-	campaignMeta        // For consolidation. Leave empty if not consolidating
-	Vantage      string `json:"src_ip"`
-	Port         int    `json:"tcp_dst_port"`
-	Start        string `json:"_time_start"`
-	End          string `json:"_time_end"`
+	//campaignMeta        // For consolidation. Leave empty if not consolidating
+	Vantage string `json:"src_ip"`
+	Port    int    `json:"tcp_dst_port"`
+	Start   string `json:"_time_start"`
+	End     string `json:"_time_end"`
 }
 
 var (
@@ -193,10 +193,10 @@ func writeFileMeta(path string) {
 		End:     time.Unix(maxSec, 0).UTC().Format(time.RFC3339),
 	}
 
-	if *consolidate {
-		md.FileType = *filetype
-		md.Owner = *owner
-	}
+	//if *consolidate {
+	//	md.FileType = *filetype
+	//	md.Owner = *owner
+	//}
 
 	dir := filepath.Dir(path)
 	mname := fmt.Sprintf("%s/%s-%s-%s%s", dir, sport, try, vantage, pto3.FileMetadataSuffix)
