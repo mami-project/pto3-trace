@@ -33,7 +33,7 @@ package main
   ==========+================================+=====================
   9171447313 IP::Checksum                    | Ignore
   9171446541 IP::TTL                         | Ignore
-  1279130958 IP::DiffServicesCP              | Ignore
+  1279130958 IP::DiffServicesCP              | NEW dscp.0.changed
    326560370 TCP::O::MSS                     | tcp.option.mss.changed
    260492548 TCP::Checksum                   | Ignore
    172780786 TCP::SeqNumber                  | Ignore
@@ -130,6 +130,9 @@ func makeTbObs(start *time.Time, path *pto3.Path,
 	return ret
 }
 
+// dscpChanged is the name of the one condition that needs decimal output, not hex.
+const dscpChanged = "dscp.0.changed"
+
 var condCache = make(map[string]*pto3.Condition)
 
 func makeCondition(name string) *pto3.Condition {
@@ -143,24 +146,22 @@ func makeCondition(name string) *pto3.Condition {
 	return ret
 }
 
-func toHexString(s string) string {
-	num, err := strconv.ParseInt(s, 16, 64)
-
-	if err == nil {
-		return fmt.Sprintf("0x%x", num)
+func makeChange(new string, toDec bool) string {
+	num, err := strconv.ParseInt(new, 16, 64)
+	if err != nil {
+		num, err = strconv.ParseInt(new, 10, 64)
+		if err != nil {
+			return new
+		}
 	}
-	return ""
-}
-
-func makeChange(new string) string {
-	if numberString := toHexString(new); numberString != "" {
-		return numberString
+	if toDec {
+		return fmt.Sprintf("%d", num)
 	}
-	return new
+	return fmt.Sprintf("0x%x", num)
 }
 
 func appendObservation(o []pto3.Observation, start *time.Time, path *pto3.Path, cname string, new string) []pto3.Observation {
-	return append(o, makeTbObs(start, path, makeCondition(cname), makeChange(new)))
+	return append(o, makeTbObs(start, path, makeCondition(cname), makeChange(new, cname == dscpChanged)))
 }
 
 func extractTraceboxV1Observations(srcIP string, tcpDestPort string, line []byte) ([]pto3.Observation, error) {
