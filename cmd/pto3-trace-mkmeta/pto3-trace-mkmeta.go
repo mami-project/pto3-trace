@@ -144,7 +144,6 @@ func writeFileMeta(path string) {
 	if err != nil {
 		logger.Panicf("can't happen: number \"%s\" doesn't match number regexp", matches[1])
 	}
-	try := matches[2]
 	vantage := fmt.Sprintf("%s.%s.%s.%s", matches[3], matches[4], matches[5], matches[6])
 
 	f, err := os.Open(path)
@@ -196,8 +195,7 @@ func writeFileMeta(path string) {
 	//	md.Owner = *owner
 	//}
 
-	dir := filepath.Dir(path)
-	mname := fmt.Sprintf("%s/%s-%s-%s%s", dir, sport, try, vantage, pto3.FileMetadataSuffix)
+	mname := fmt.Sprintf("%s%s", fname, pto3.FileMetadataSuffix)
 	mdout, err := os.Create(mname)
 	if err != nil {
 		logger.Printf("ERROR: can't open metadata file \"%s\" for writing: %v", mname, err)
