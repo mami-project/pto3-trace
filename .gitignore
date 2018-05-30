@@ -19,10 +19,14 @@ data/
 # Output directory, contains program output
 out/
 
-# Generated source
-cmd/pto3-trace/conditions.go
+# Generated sources and other files
+/cmd/pto3-trace/conditions.go
 gitref.go
 __pto_campaign_metadata.json
+*.pto_file_metadata.json
 
 # Binaries
-tb-cond
+/tb-cond
+/pto3-trace-mkmeta
+/pto3-trace
+/TODO

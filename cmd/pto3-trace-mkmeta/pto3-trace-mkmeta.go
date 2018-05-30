@@ -195,7 +195,7 @@ func writeFileMeta(path string) {
 	//	md.Owner = *owner
 	//}
 
-	mname := fmt.Sprintf("%s%s", fname, pto3.FileMetadataSuffix)
+	mname := fmt.Sprintf("%s%s", path, pto3.FileMetadataSuffix)
 	mdout, err := os.Create(mname)
 	if err != nil {
 		logger.Printf("ERROR: can't open metadata file \"%s\" for writing: %v", mname, err)
