@@ -146,6 +146,18 @@ func makeCondition(name string) *pto3.Condition {
 	return ret
 }
 
+func makeDSCPCondition(old string) *pto3.Condition {
+	name := "dscp." + old + ".changed"
+	if val, ok := condCache[name]; ok {
+		return val
+	}
+
+	ret := &pto3.Condition{Name: name}
+	condCache[name] = ret
+
+	return ret
+}
+
 func makeChange(new string, toDec bool) string {
 	num, err := strconv.ParseInt(new, 16, 64)
 	if err != nil {
@@ -161,7 +173,23 @@ func makeChange(new string, toDec bool) string {
 }
 
 func appendObservation(o []pto3.Observation, start *time.Time, path *pto3.Path, cname string, new string) []pto3.Observation {
-	return append(o, makeTbObs(start, path, makeCondition(cname), makeChange(new, cname == dscpChanged)))
+	return append(o, makeTbObs(start, path, makeCondition(cname), makeChange(new, false)))
+}
+
+func toDecString(val string) string {
+	num, err := strconv.ParseInt(val, 16, 64)
+	if err != nil {
+		panic("can't convert string to decimal")
+	}
+
+	return fmt.Sprintf("%d", num)
+}
+
+func appendDSCPObservation(o []pto3.Observation, start *time.Time, path *pto3.Path, old, new string) []pto3.Observation {
+	oldDec := toDecString(old)
+	newDec := toDecString(new)
+
+	return append(o, makeTbObs(start, path, makeDSCPCondition(oldDec), makeChange(newDec, true)))
 }
 
 func extractTraceboxV1Observations(srcIP string, tcpDestPort string, line []byte) ([]pto3.Observation, error) {
@@ -174,13 +202,25 @@ func extractTraceboxV1Observations(srcIP string, tcpDestPort string, line []byte
 	var ret = make([]pto3.Observation, 0)
 	start := time.Unix(tbobs.Timestamp, 0)
 
+	var values = make(map[string]string)
+
 	for i, h := range tbobs.Hops {
 		var path *pto3.Path
 
 		for _, m := range h.Modifications {
 			if ptoCond, ok := tbToCond[m.Name]; ok {
-				path = makePathForChange(path, srcIP, &tbobs, i)
-				ret = appendObservation(ret, &start, path, ptoCond, m.Value)
+				if stored, ok := values[m.Name]; ok && !ok || m.Value != stored {
+					path = makePathForChange(path, srcIP, &tbobs, i)
+					if ptoCond == dscpChanged {
+						if !ok { // unknown DSCP value, we assume 0
+							stored = "0"
+						}
+						ret = appendDSCPObservation(ret, &start, path, stored, m.Value)
+					} else {
+						ret = appendObservation(ret, &start, path, ptoCond, m.Value)
+					}
+					values[m.Name] = m.Value
+				}
 			}
 		}
 	}
