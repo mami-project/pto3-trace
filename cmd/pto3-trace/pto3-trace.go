@@ -209,7 +209,7 @@ func extractTraceboxV1Observations(srcIP string, tcpDestPort string, line []byte
 
 		for _, m := range h.Modifications {
 			if ptoCond, ok := tbToCond[m.Name]; ok {
-				if stored, ok := values[m.Name]; ok && !ok || m.Value != stored {
+				if stored, ok := values[m.Name]; !ok || m.Value != stored {
 					path = makePathForChange(path, srcIP, &tbobs, i)
 					if ptoCond == dscpChanged {
 						if !ok { // unknown DSCP value, we assume 0
