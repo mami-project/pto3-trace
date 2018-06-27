@@ -86,7 +86,6 @@ import (
 	"os"
 	"strconv"
 	"time"
-	"runtime/pprof"
 
 	pto3 "github.com/mami-project/pto3-go"
 	trace "github.com/mami-project/pto3-trace"
@@ -312,16 +311,7 @@ func main() {
 	flag.Usage = usage
 	flag.Parse()
 
-	if true {
-        f, err := os.Create("cpu.prof")
-        if err != nil {
-            log.Fatal("could not create CPU profile: ", err)
-        }
-        if err := pprof.StartCPUProfile(f); err != nil {
-            log.Fatal("could not start CPU profile: ", err)
-        }
-        defer pprof.StopCPUProfile()
-    }
+	
 
 	mdfile := os.NewFile(3, ".piped_metadata.json")
 
