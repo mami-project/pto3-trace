@@ -78,7 +78,7 @@ package main
 import (
 	"bufio"
 	"bytes"
-	"encoding/json"
+	//"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -86,9 +86,12 @@ import (
 	"os"
 	"strconv"
 	"time"
+	"runtime/pprof"
 
 	pto3 "github.com/mami-project/pto3-go"
 	trace "github.com/mami-project/pto3-trace"
+
+ 	"github.com/json-iterator/go"
 )
 
 type nameValue struct {
@@ -195,11 +198,11 @@ func appendDSCPObservation(o []pto3.Observation, start *time.Time, path *pto3.Pa
 func extractTraceboxV1Observations(srcIP string, tcpDestPort string, line []byte) ([]pto3.Observation, error) {
 	var tbobs tbObs
 
-	if err := json.Unmarshal(line, &tbobs); err != nil {
+	if err := jsoniter.Unmarshal(line, &tbobs); err != nil {
 		return nil, err
 	}
 
-	var ret = make([]pto3.Observation, 0)
+	var ret = make([]pto3.Observation, 16)[0:0]
 	start := time.Unix(tbobs.Timestamp, 0)
 
 	var values = make(map[string]string)
@@ -250,6 +253,7 @@ func normalizeTrace(rawBytes []byte, metain io.Reader, out io.Writer) error {
 
 	conditions := make(map[string]bool)
 
+
 	var lineno int
 	for scanner.Scan() {
 		lineno++
@@ -292,7 +296,7 @@ func normalizeTrace(rawBytes []byte, metain io.Reader, out io.Writer) error {
 	// hardcode analyzer path (FIXME, tag?)
 	mdout["_analyzer"] = "https://github.com/mami-project/pto3-trace/tree/" + trace.CommitRef + "/cmd/pto3-trace/pto3-trace.json"
 
-	bytes, err := json.Marshal(mdout)
+	bytes, err := jsoniter.Marshal(mdout)
 	if err != nil {
 		return fmt.Errorf("error marshaling metadata: %s", err.Error())
 	}
@@ -307,6 +311,17 @@ func normalizeTrace(rawBytes []byte, metain io.Reader, out io.Writer) error {
 func main() {
 	flag.Usage = usage
 	flag.Parse()
+
+	if true {
+        f, err := os.Create("cpu.prof")
+        if err != nil {
+            log.Fatal("could not create CPU profile: ", err)
+        }
+        if err := pprof.StartCPUProfile(f); err != nil {
+            log.Fatal("could not start CPU profile: ", err)
+        }
+        defer pprof.StopCPUProfile()
+    }
 
 	mdfile := os.NewFile(3, ".piped_metadata.json")
 
