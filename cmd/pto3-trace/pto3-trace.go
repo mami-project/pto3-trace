@@ -138,26 +138,13 @@ const dscpChanged = "dscp.0.changed"
 var condCache = make(map[string]*pto3.Condition)
 
 func makeCondition(name string) *pto3.Condition {
-	if val, ok := condCache[name]; ok {
-		return val
-	}
-
-	ret := &pto3.Condition{Name: name}
-	condCache[name] = ret
-
-	return ret
+	return &pto3.Condition{Name: name}
 }
 
 func makeDSCPCondition(old string) *pto3.Condition {
 	name := "dscp." + old + ".changed"
-	if val, ok := condCache[name]; ok {
-		return val
-	}
-
-	ret := &pto3.Condition{Name: name}
-	condCache[name] = ret
-
-	return ret
+	
+	return &pto3.Condition{Name: name}
 }
 
 func makeChange(new string, toDec bool) string {
@@ -258,7 +245,7 @@ func unmarshaller(srcCh chan []byte, dstCh chan []pto3.Observation,
 }
 
 
-func normalizeTrace(rawBytes []byte, metain io.Reader, out io.Writer, numUnmarshallers int) error {
+func normalizeTrace(rawBytes []byte, metain io.Reader, out io.Writer, numUnmarshallers int, chSize int) error {
 	md, err := pto3.RawMetadataFromReader(metain, nil)
 	if err != nil {
 		return fmt.Errorf("could not read metadata: %v", err)
@@ -280,8 +267,8 @@ func normalizeTrace(rawBytes []byte, metain io.Reader, out io.Writer, numUnmarsh
 
 	conditions := make(map[string]bool)
 
-	srcCh := make(chan []byte, 10)
-	dstCh := make(chan []pto3.Observation, 10)
+	srcCh := make(chan []byte, chSize)
+	dstCh := make(chan []pto3.Observation, chSize)
 	doneCh := make(chan bool)
 	
 	doneChans := make([]chan bool, numUnmarshallers)
@@ -371,7 +358,8 @@ func normalizeTrace(rawBytes []byte, metain io.Reader, out io.Writer, numUnmarsh
 func main() {
 	flag.Usage = usage
 
-	numUnmarshallers := flag.Int("num-unmarshallers", 8, "Number of go routines used to unmarshall.")
+	numUnmarshallers := flag.Int("num-unmarshallers", 8, "Number of goroutines used to unmarshall.")
+	chSize := flag.Int("ch-size", 8192, "Size of channels used to communicate between goroutines.")
 
 	flag.Parse()
 
@@ -384,7 +372,7 @@ func main() {
 		log.Fatalf("can't map stdin: %v", err)
 	}
 
-	if err := normalizeTrace(bytes, mdfile, os.Stdout, *numUnmarshallers); err != nil {
+	if err := normalizeTrace(bytes, mdfile, os.Stdout, *numUnmarshallers, *chSize); err != nil {
 		log.Fatalf("error while normalising: %v", err)
 	}
 
