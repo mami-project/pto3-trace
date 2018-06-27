@@ -309,6 +309,9 @@ func normalizeTrace(rawBytes []byte, metain io.Reader, out io.Writer, numUnmarsh
 			continue
 		}
 
+		// This is NECESSARY because Scanner internally
+		// resuses the buffer when calling `Scan`. This means
+		// we need to copy the buffer. 
 		line_ := make([]byte, len(line))
 		copy(line_, line)
 
