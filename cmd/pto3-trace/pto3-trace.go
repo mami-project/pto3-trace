@@ -194,14 +194,8 @@ func appendDSCPObservation(o []pto3.Observation, start *time.Time, path *pto3.Pa
 	return append(o, makeTbObs(start, path, makeDSCPCondition(oldDec), makeChange(newDec, true)))
 }
 
-func extractTraceboxV1Observations(srcIP string, tcpDestPort string, line []byte) ([]pto3.Observation, error) {
-	var tbobs tbObs
-
-	if err := jsoniter.Unmarshal(line, &tbobs); err != nil {
-		return nil, err
-	}
-
-	var ret = make([]pto3.Observation, 16)[0:0]
+func extractTraceboxV1Observations(srcIP string, tcpDestPort string, tbobs *tbObs) ([]pto3.Observation, error) {
+	var ret = make([]pto3.Observation, 4)[0:0]
 	start := time.Unix(tbobs.Timestamp, 0)
 
 	var values = make(map[string]string)
@@ -212,7 +206,7 @@ func extractTraceboxV1Observations(srcIP string, tcpDestPort string, line []byte
 		for _, m := range h.Modifications {
 			if ptoCond, ok := tbToCond[m.Name]; ok {
 				if stored, ok := values[m.Name]; !ok || m.Value != stored {
-					path = makePathForChange(path, srcIP, &tbobs, i)
+					path = makePathForChange(path, srcIP, tbobs, i)
 					if ptoCond == dscpChanged {
 						if !ok { // unknown DSCP value, we assume 0
 							stored = "0"
@@ -230,7 +224,41 @@ func extractTraceboxV1Observations(srcIP string, tcpDestPort string, line []byte
 	return ret, nil
 }
 
-func normalizeTrace(rawBytes []byte, metain io.Reader, out io.Writer) error {
+// Reads lines from the srcCh, unmarshalls it and invokes the extraction function
+// and sends the result to dstCh.
+// If done (when srcCh is closed) will send true on doneCh.
+func unmarshaller(srcCh chan []byte, dstCh chan []pto3.Observation, 
+		extractFunc func(string, string, *tbObs) ([]pto3.Observation, error), 
+		srcIP, tcpDestPort string, doneCh chan bool) {
+
+	for {
+		lineUntrimmed, ok := <- srcCh
+		line := trace.TrimSpace(lineUntrimmed)
+
+		if !ok {
+			break
+		}
+
+		var tbobs tbObs
+		
+		if err := jsoniter.Unmarshal(line, &tbobs); err != nil {
+			panic(err.Error())
+		}
+
+		obsen, err := extractFunc(srcIP, tcpDestPort, &tbobs)
+
+		if err != nil {
+			panic(err.Error())
+		}
+
+		dstCh <- obsen
+	}
+
+	doneCh <- true
+}
+
+
+func normalizeTrace(rawBytes []byte, metain io.Reader, out io.Writer, numUnmarshallers int) error {
 	md, err := pto3.RawMetadataFromReader(metain, nil)
 	if err != nil {
 		return fmt.Errorf("could not read metadata: %v", err)
@@ -240,7 +268,7 @@ func normalizeTrace(rawBytes []byte, metain io.Reader, out io.Writer) error {
 	var tcpDestPort = md.Get("tcp_dst_port", true)
 	var in = bytes.NewReader(rawBytes)
 	var scanner *bufio.Scanner
-	var extractFunc func(string, string, []byte) ([]pto3.Observation, error)
+	var extractFunc func(string, string, *tbObs) ([]pto3.Observation, error)
 
 	switch md.Filetype(true) {
 	case "tracebox-v1-ndjson":
@@ -252,29 +280,62 @@ func normalizeTrace(rawBytes []byte, metain io.Reader, out io.Writer) error {
 
 	conditions := make(map[string]bool)
 
+	srcCh := make(chan []byte, 10)
+	dstCh := make(chan []pto3.Observation, 10)
+	doneCh := make(chan bool)
+	
+	doneChans := make([]chan bool, numUnmarshallers)
+
+	for i := 0; i < numUnmarshallers; i++ {
+		doneChans[i] = make(chan bool)
+		go unmarshaller(srcCh, dstCh, extractFunc, srcIP, tcpDestPort, doneChans[i])
+	}
+
+	// Spawn a goroutine to write to out and collect
+	// all the observations. 
+	go func() {
+		for {
+			obsen, ok := <- dstCh
+
+			if !ok {
+				break
+			}	
+
+			for _, o := range obsen {
+				conditions[o.Condition.Name] = true
+			}
+
+			if err := pto3.WriteObservations(obsen, out); err != nil {
+				panic(err.Error())
+			}
+		}
+
+		doneCh <- true
+	}()
 
 	var lineno int
 	for scanner.Scan() {
 		lineno++
-		line := trace.TrimSpace(scanner.Bytes())
+		line := scanner.Bytes()
 
 		if line[0] != '{' {
 			continue
 		}
 
-		obsen, err := extractFunc(srcIP, tcpDestPort, line)
-		if err != nil {
-			return fmt.Errorf("error parsing tracebox data at line %d: %v", lineno, err)
-		}
+		line_ := make([]byte, len(line))
+		copy(line_, line)
 
-		for _, o := range obsen {
-			conditions[o.Condition.Name] = true
-		}
-
-		if err := pto3.WriteObservations(obsen, out); err != nil {
-			return fmt.Errorf("error writing observation from line %d: %s", lineno, err.Error())
-		}
+		srcCh <- line_
 	}
+
+	close(srcCh)
+	
+	for i := 0; i < numUnmarshallers; i++ {
+		_ = <- doneChans[i]
+	}
+
+	close(dstCh)
+	_ = <- doneCh
 
 	mdout := make(map[string]interface{})
 	mdcond := make([]string, 0)
@@ -309,6 +370,9 @@ func normalizeTrace(rawBytes []byte, metain io.Reader, out io.Writer) error {
 
 func main() {
 	flag.Usage = usage
+
+	numUnmarshallers := flag.Int("num-unmarshallers", 8, "Number of go routines used to unmarshall.")
+
 	flag.Parse()
 
 	
@@ -320,7 +384,7 @@ func main() {
 		log.Fatalf("can't map stdin: %v", err)
 	}
 
-	if err := normalizeTrace(bytes, mdfile, os.Stdout); err != nil {
+	if err := normalizeTrace(bytes, mdfile, os.Stdout, *numUnmarshallers); err != nil {
 		log.Fatalf("error while normalising: %v", err)
 	}
 
