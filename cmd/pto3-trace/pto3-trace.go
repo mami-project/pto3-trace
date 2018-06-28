@@ -114,6 +114,9 @@ type tbObs struct {
 	Hops      []*tbHop `json:"h"`
 }
 
+const metadataURL = "https://raw.githubusercontent.com/mami-project/pto3-trace/" +
+	trace.CommitRef + "/cmd/pto3-trace/pto3-trace.json"
+
 var (
 	numUnmarshallers = flag.Int("num-unmarshallers", 8, "number of goroutines used to unmarshal.")
 	chSize           = flag.Int("ch-size", 8192, "size of channels used to communicate between goroutines.")
@@ -219,13 +222,13 @@ func extractTraceboxV1Observations(srcIP string, tcpDestPort string, tbobs *tbOb
 // Reads lines from the srcCh, unmarshalls it and invokes the extraction function
 // and sends the result to dstCh.
 // If done (when srcCh is closed) will send true on doneCh.
-func unmarshaller(srcCh chan []byte, dstCh chan []pto3.Observation,
+func unmarshaller(srcCh chan line, dstCh chan []pto3.Observation,
 	extractFunc func(string, string, *tbObs) ([]pto3.Observation, error),
 	srcIP, tcpDestPort string, doneCh chan bool) {
 
 	for {
 		lineUntrimmed, ok := <-srcCh
-		line := trace.TrimSpace(lineUntrimmed)
+		line := trace.TrimSpace(lineUntrimmed.b)
 
 		if !ok {
 			break
@@ -234,13 +237,13 @@ func unmarshaller(srcCh chan []byte, dstCh chan []pto3.Observation,
 		var tbobs tbObs
 
 		if err := jsoniter.Unmarshal(line, &tbobs); err != nil {
-			panic(err.Error())
+			panic(fmt.Sprintf("line %d: %v", lineUntrimmed.n, err))
 		}
 
 		obsen, err := extractFunc(srcIP, tcpDestPort, &tbobs)
 
 		if err != nil {
-			panic(err.Error())
+			panic(fmt.Sprintf("line %d: %v", lineUntrimmed.n, err))
 		}
 
 		dstCh <- obsen
@@ -254,6 +257,11 @@ func copyLine(line []byte) []byte {
 	copy(ret, line)
 
 	return ret
+}
+
+type line struct {
+	b []byte // bytes comprising the line
+	n int    // line number
 }
 
 func normalizeTrace(rawBytes []byte, metain io.Reader, out io.Writer) error {
@@ -278,7 +286,7 @@ func normalizeTrace(rawBytes []byte, metain io.Reader, out io.Writer) error {
 
 	conditions := make(map[string]bool)
 
-	srcCh := make(chan []byte, *chSize)
+	srcCh := make(chan line, *chSize)
 	dstCh := make(chan []pto3.Observation, *chSize)
 	doneCh := make(chan bool)
 
@@ -290,7 +298,7 @@ func normalizeTrace(rawBytes []byte, metain io.Reader, out io.Writer) error {
 	}
 
 	// Spawn a goroutine to collect observations
-	// and write them to out. 
+	// and write them to out.
 	go func() {
 		for {
 			obsen, ok := <-dstCh
@@ -317,18 +325,18 @@ func normalizeTrace(rawBytes []byte, metain io.Reader, out io.Writer) error {
 	// among the unmarshallers.
 	for scanner.Scan() {
 		lineno++
-		line := scanner.Bytes()
+		origLine := scanner.Bytes()
 
-		if line[0] != '{' {
+		if origLine[0] != '{' {
 			continue
 		}
 
 		// This is NECESSARY because Scanner internally
 		// reuses the buffer when calling `Scan`. This means
 		// we need to copy the buffer.
-		myLine := copyLine(line)
+		myLine := copyLine(origLine)
 
-		srcCh <- myLine
+		srcCh <- line{b: myLine, n: lineno}
 	}
 
 	// close the source channel to signal the unmarshallers
@@ -346,7 +354,7 @@ func normalizeTrace(rawBytes []byte, metain io.Reader, out io.Writer) error {
 	// collector goroutine.
 	close(dstCh)
 
-	// wait for the collector goroutine to have actually stopped. 
+	// wait for the collector goroutine to have actually stopped.
 	_ = <-doneCh
 
 	mdout := make(map[string]interface{})
@@ -366,8 +374,7 @@ func normalizeTrace(rawBytes []byte, metain io.Reader, out io.Writer) error {
 	mdout["_time_end"] = md.TimeEnd(true).Format(time.RFC3339)
 
 	// hardcode analyzer path (FIXME, tag?)
-	mdout["_analyzer"] = "https://raw.githubusercontent.com/mami-project/pto3-trace/" +
-		trace.CommitRef + "/cmd/pto3-trace/pto3-trace.json"
+	mdout["_analyzer"] = metadataURL
 
 	bytes, err := jsoniter.Marshal(mdout)
 	if err != nil {
@@ -381,15 +388,26 @@ func normalizeTrace(rawBytes []byte, metain io.Reader, out io.Writer) error {
 	return nil
 }
 
-func normalizeV1(ec string, mdin *RawMetadata, mdout map[string]interface{}) ([]Observation, error) {
+func normalizeV1(rec []byte, rawmeta *pto3.RawMetadata, metachan chan<- map[string]interface{}) ([]pto3.Observation, error) {
+	var srcIP = rawmeta.Get("src_ip", true)
+	var tcpDestPort = rawmeta.Get("tcp_dst_port", true)
 
+	var tbobs tbObs
+
+	line := trace.TrimSpace(rec)
+
+	if err := jsoniter.Unmarshal(line, &tbobs); err != nil {
+		return nil, err
+	}
+
+	obsen, err := extractTraceboxV1Observations(srcIP, tcpDestPort, &tbobs)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return obsen, nil
 }
-
-func f() int {
-
-}
-
-bla bla bla
 
 func main() {
 	flag.Usage = usage
@@ -398,23 +416,8 @@ func main() {
 
 	mdfile := os.NewFile(3, ".piped_metadata.json")
 
-	bytes, _, err := pto3.MapFile(os.Stdin)
-	if err != nil {
-		log.Fatalf("can't map stdin: %v", err)
-	}
-
-	sn := pto3.NewScanningNormalizer(metadataURL)
+	sn := pto3.NewParallelScanningNormalizer(metadataURL, *numUnmarshallers)
 	sn.RegisterFiletype("tracebox-v1-ndjson", bufio.ScanLines, normalizeV1, nil)
-	sn.RegisterFiletype("pathspider-v2-ndjson", bufio.ScanLines, normalizeV2, nil)
 
-	// and run it
 	log.Fatal(sn.Normalize(os.Stdin, mdfile, os.Stdout))
-
-	if err := normalizeTrace(bytes, mdfile, os.Stdout); err != nil {
-		log.Fatalf("error while normalising: %v", err)
-	}
-
-	if err := pto3.UnmapFile(bytes); err != nil {
-		log.Fatalf("can't unmap stdin: %v", err)
-	}
 }
