@@ -114,6 +114,11 @@ type tbObs struct {
 	Hops      []*tbHop `json:"h"`
 }
 
+var (
+	numUnmarshallers = flag.Int("num-unmarshallers", 8, "number of goroutines used to unmarshal.")
+	chSize           = flag.Int("ch-size", 8192, "size of channels used to communicate between goroutines.")
+)
+
 func usage() {
 	fmt.Fprintf(flag.CommandLine.Output(), "%s, git ref %s\n", os.Args[0], trace.CommitRef)
 	flag.PrintDefaults()
@@ -251,7 +256,7 @@ func copyLine(line []byte) []byte {
 	return ret
 }
 
-func normalizeTrace(rawBytes []byte, metain io.Reader, out io.Writer, numUnmarshallers int, chSize int) error {
+func normalizeTrace(rawBytes []byte, metain io.Reader, out io.Writer) error {
 	md, err := pto3.RawMetadataFromReader(metain, nil)
 	if err != nil {
 		return fmt.Errorf("could not read metadata: %v", err)
@@ -273,13 +278,13 @@ func normalizeTrace(rawBytes []byte, metain io.Reader, out io.Writer, numUnmarsh
 
 	conditions := make(map[string]bool)
 
-	srcCh := make(chan []byte, chSize)
-	dstCh := make(chan []pto3.Observation, chSize)
+	srcCh := make(chan []byte, *chSize)
+	dstCh := make(chan []pto3.Observation, *chSize)
 	doneCh := make(chan bool)
 
-	doneChans := make([]chan bool, numUnmarshallers)
+	doneChans := make([]chan bool, *numUnmarshallers)
 
-	for i := 0; i < numUnmarshallers; i++ {
+	for i := 0; i < *numUnmarshallers; i++ {
 		doneChans[i] = make(chan bool)
 		go unmarshaller(srcCh, dstCh, extractFunc, srcIP, tcpDestPort, doneChans[i])
 	}
@@ -325,7 +330,7 @@ func normalizeTrace(rawBytes []byte, metain io.Reader, out io.Writer, numUnmarsh
 
 	close(srcCh)
 
-	for i := 0; i < numUnmarshallers; i++ {
+	for i := 0; i < *numUnmarshallers; i++ {
 		_ = <-doneChans[i]
 	}
 
@@ -349,7 +354,8 @@ func normalizeTrace(rawBytes []byte, metain io.Reader, out io.Writer, numUnmarsh
 	mdout["_time_end"] = md.TimeEnd(true).Format(time.RFC3339)
 
 	// hardcode analyzer path (FIXME, tag?)
-	mdout["_analyzer"] = "https://github.com/mami-project/pto3-trace/tree/" + trace.CommitRef + "/cmd/pto3-trace/pto3-trace.json"
+	mdout["_analyzer"] = "https://raw.githubusercontent.com/mami-project/pto3-trace/" +
+		trace.CommitRef + "/cmd/pto3-trace/pto3-trace.json"
 
 	bytes, err := jsoniter.Marshal(mdout)
 	if err != nil {
@@ -363,11 +369,18 @@ func normalizeTrace(rawBytes []byte, metain io.Reader, out io.Writer, numUnmarsh
 	return nil
 }
 
+func normalizeV1(ec string, mdin *RawMetadata, mdout map[string]interface{}) ([]Observation, error) {
+
+}
+
+func f() int {
+
+}
+
+bla bla bla
+
 func main() {
 	flag.Usage = usage
-
-	numUnmarshallers := flag.Int("num-unmarshallers", 8, "Number of goroutines used to unmarshall.")
-	chSize := flag.Int("ch-size", 8192, "Size of channels used to communicate between goroutines.")
 
 	flag.Parse()
 
@@ -378,7 +391,14 @@ func main() {
 		log.Fatalf("can't map stdin: %v", err)
 	}
 
-	if err := normalizeTrace(bytes, mdfile, os.Stdout, *numUnmarshallers, *chSize); err != nil {
+	sn := pto3.NewScanningNormalizer(metadataURL)
+	sn.RegisterFiletype("tracebox-v1-ndjson", bufio.ScanLines, normalizeV1, nil)
+	sn.RegisterFiletype("pathspider-v2-ndjson", bufio.ScanLines, normalizeV2, nil)
+
+	// and run it
+	log.Fatal(sn.Normalize(os.Stdin, mdfile, os.Stdout))
+
+	if err := normalizeTrace(bytes, mdfile, os.Stdout); err != nil {
 		log.Fatalf("error while normalising: %v", err)
 	}
 
