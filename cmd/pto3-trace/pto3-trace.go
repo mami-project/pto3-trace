@@ -289,8 +289,8 @@ func normalizeTrace(rawBytes []byte, metain io.Reader, out io.Writer) error {
 		go unmarshaller(srcCh, dstCh, extractFunc, srcIP, tcpDestPort, doneChans[i])
 	}
 
-	// Spawn a goroutine to write to out and collect
-	// all the observations.
+	// Spawn a goroutine to collect observations
+	// and write them to out. 
 	go func() {
 		for {
 			obsen, ok := <-dstCh
@@ -312,6 +312,9 @@ func normalizeTrace(rawBytes []byte, metain io.Reader, out io.Writer) error {
 	}()
 
 	var lineno int
+
+	// Split the input into lines and distribute the lines
+	// among the unmarshallers.
 	for scanner.Scan() {
 		lineno++
 		line := scanner.Bytes()
@@ -328,13 +331,22 @@ func normalizeTrace(rawBytes []byte, metain io.Reader, out io.Writer) error {
 		srcCh <- myLine
 	}
 
+	// close the source channel to signal the unmarshallers
+	// to start stopping.
+	// The unmarshallers don't stop immediately of course as they might still be
+	// performing computations or the source channel still has buffered elements.
 	close(srcCh)
 
+	// wait for all unmarshallers to have finished their job
 	for i := 0; i < *numUnmarshallers; i++ {
 		_ = <-doneChans[i]
 	}
 
+	// close the destination channel to send a stop signal to the
+	// collector goroutine.
 	close(dstCh)
+
+	// wait for the collector goroutine to have actually stopped. 
 	_ = <-doneCh
 
 	mdout := make(map[string]interface{})
