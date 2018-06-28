@@ -11,7 +11,7 @@ import (
 	"sort"
 	"time"
 
-	trace "github.com/mami-project/pto3-trace"
+	pto3 "github.com/mami-project/pto3-go"
 )
 
 type tbStat struct {
@@ -83,7 +83,7 @@ func processFile(path string, stats chan<- stats) {
 		return
 	}
 
-	bytes, size, err := trace.MapFile(f)
+	bytes, size, err := pto3.MapFile(f)
 	if err != nil {
 		log.Printf("ERROR: can't map file \"%s\": %v", path, err)
 		return
@@ -102,7 +102,7 @@ func processFile(path string, stats chan<- stats) {
 
 	stats <- *stat
 
-	if err := trace.UnmapFile(bytes); err != nil {
+	if err := pto3.UnmapFile(bytes); err != nil {
 		log.Printf("ERROR: can't unmap \"%s\": %v", path, err)
 	}
 	if err := f.Close(); err != nil {
